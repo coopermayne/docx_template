@@ -85,8 +85,9 @@ def generate_document():
         def cleanup():
             try:
                 os.unlink(temp_file.name)
-            except Exception:
-                pass
+            except (OSError, FileNotFoundError) as e:
+                # Log cleanup errors but don't fail the response
+                app.logger.warning(f"Failed to cleanup temporary file {temp_file.name}: {e}")
         
         return response
         

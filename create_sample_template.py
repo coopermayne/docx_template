@@ -1,6 +1,8 @@
 """
 Script to create a sample Word document template with jinja2 placeholders
 that can be used with docxtpl.
+
+Note: python-docx is installed automatically as a dependency of docxtpl
 """
 from docx import Document
 from docx.shared import Pt, Inches
