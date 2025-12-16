@@ -93,6 +93,22 @@ Templates are Word documents (`.docx`) that use Jinja2 syntax for placeholders:
 3. Save the document as `.docx` in the `templates/` directory
 4. Use the template name in the API call: `/generate?template=your_template.docx&name=Value`
 
+## Testing
+
+Run the included tests to verify everything is working:
+
+```bash
+python -m unittest test_app.py -v
+```
+
+Or use the example script to see the API in action:
+
+```bash
+python example_usage.py
+```
+
+This will generate a sample document with predefined parameters.
+
 ## Project Structure
 
 ```
@@ -101,6 +117,8 @@ docx_template/
 ├── requirements.txt            # Python dependencies
 ├── render.yaml                 # Render deployment configuration
 ├── create_sample_template.py   # Script to create sample template
+├── example_usage.py            # Example script showing API usage
+├── test_app.py                 # Unit tests for the API
 ├── templates/                  # Directory for document templates
 │   └── default_template.docx   # Default sample template
 └── README.md                   # This file
