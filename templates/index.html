@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RFP Response Tool</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <script defer src="/static/vendor/alpine.min.js"></script>
+    <script src="/static/js/api.js"></script>
+</head>
+<body>
+    <div x-data="app()" x-init="init()">
+        <!-- Header -->
+        <header>
+            <div class="container">
+                <h1>Legal RFP Response Tool</h1>
+            </div>
+        </header>
+
+        <main class="container">
+            <!-- Steps Indicator -->
+            <ul class="steps">
+                <li class="step"
+                    :class="{ 'active': currentStep === 1, 'completed': currentStep > 1 }"
+                    @click="goToStep(1)">
+                    <span class="step-number">1</span>
+                    <span class="step-label">Upload RFP</span>
+                </li>
+                <li class="step"
+                    :class="{ 'active': currentStep === 2, 'completed': currentStep > 2 }"
+                    @click="session.id && goToStep(2)">
+                    <span class="step-number">2</span>
+                    <span class="step-label">Add Documents</span>
+                </li>
+                <li class="step"
+                    :class="{ 'active': currentStep === 3, 'completed': currentStep > 3 }"
+                    @click="session.requests.length && goToStep(3)">
+                    <span class="step-number">3</span>
+                    <span class="step-label">Review & Edit</span>
+                </li>
+                <li class="step"
+                    :class="{ 'active': currentStep === 4 }"
+                    @click="session.analysis_complete && goToStep(4)">
+                    <span class="step-number">4</span>
+                    <span class="step-label">Generate</span>
+                </li>
+            </ul>
+
+            <!-- Error Alert -->
+            <div x-show="error" class="alert alert-error" x-text="error"></div>
+
+            <!-- Step 1: Upload RFP -->
+            <div x-show="currentStep === 1" class="card">
+                <h2 class="card-title">Upload Request for Production (RFP)</h2>
+
+                <div class="upload-zone"
+                     :class="{ 'dragover': isDragging }"
+                     @dragover.prevent="isDragging = true"
+                     @dragleave.prevent="isDragging = false"
+                     @drop.prevent="handleRFPDrop($event)"
+                     @click="$refs.rfpInput.click()">
+                    <div class="upload-zone-icon">📄</div>
+                    <div class="upload-zone-text">
+                        <template x-if="!uploading">
+                            <span>Drag & drop your RFP PDF here, or click to browse</span>
+                        </template>
+                        <template x-if="uploading">
+                            <span class="loading">
+                                <span class="spinner"></span>
+                                Parsing PDF...
+                            </span>
+                        </template>
+                    </div>
+                    <div class="upload-zone-hint">PDF files only</div>
+                </div>
+                <input type="file"
+                       x-ref="rfpInput"
+                       accept=".pdf"
+                       style="display: none"
+                       @change="handleRFPSelect($event)">
+
+                <!-- Parsed Requests Preview - Editable -->
+                <template x-if="session.requests.length > 0">
+                    <div style="margin-top: 1.5rem;">
+                        <h3 class="card-title">Parsed Requests (<span x-text="session.requests.length"></span> found)</h3>
+                        <p style="color: var(--gray-600); margin-bottom: 1rem; font-size: 0.875rem;">
+                            Review and edit the parsed requests below. Fix any parsing errors before continuing.
+                        </p>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 80px;">Request #</th>
+                                    <th>Request Text</th>
+                                    <th style="width: 80px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="(request, index) in session.requests" :key="request.id">
+                                    <tr>
+                                        <td>
+                                            <input type="text"
+                                                   x-model="request.number"
+                                                   class="table-input"
+                                                   style="width: 60px; text-align: center;"
+                                                   @blur="updateRequest(request)">
+                                        </td>
+                                        <td>
+                                            <textarea x-model="request.text"
+                                                      class="table-input"
+                                                      rows="3"
+                                                      style="width: 100%;"
+                                                      @blur="updateRequest(request)"></textarea>
+                                        </td>
+                                        <td style="text-align: center;">
+                                            <button class="btn-icon" @click="removeRequest(index)" title="Remove request">✕</button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+
+                        <div class="actions-bar">
+                            <button class="btn btn-secondary" @click="addRequest()">+ Add Request</button>
+                            <button class="btn btn-primary" @click="saveRequestsAndContinue()">
+                                Save & Continue →
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Step 2: Add Documents -->
+            <div x-show="currentStep === 2" class="card">
+                <h2 class="card-title">Add Responsive Documents</h2>
+                <p style="color: var(--gray-600); margin-bottom: 1rem;">
+                    Drag and drop your document files. We'll extract file names and Bates numbers automatically.
+                </p>
+
+                <div class="upload-zone"
+                     :class="{ 'dragover': isDragging }"
+                     @dragover.prevent="isDragging = true"
+                     @dragleave.prevent="isDragging = false"
+                     @drop.prevent="handleDocsDrop($event)"
+                     @click="$refs.docsInput.click()">
+                    <div class="upload-zone-icon">📁</div>
+                    <div class="upload-zone-text">Drag & drop documents here, or click to browse</div>
+                    <div class="upload-zone-hint">We'll extract metadata from the files</div>
+                </div>
+                <input type="file"
+                       x-ref="docsInput"
+                       multiple
+                       style="display: none"
+                       @change="handleDocsSelect($event)">
+
+                <!-- Document List - Table Format -->
+                <template x-if="session.documents.length > 0">
+                    <div style="margin-top: 1.5rem;">
+                        <h3 class="card-title">Documents (<span x-text="session.documents.length"></span>)</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Filename</th>
+                                    <th style="width: 120px;">Bates Start</th>
+                                    <th style="width: 120px;">Bates End</th>
+                                    <th style="width: 200px;">Description</th>
+                                    <th style="width: 60px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="doc in session.documents" :key="doc.id">
+                                    <tr>
+                                        <td>
+                                            <input type="text"
+                                                   x-model="doc.filename"
+                                                   class="table-input"
+                                                   style="width: 100%;"
+                                                   @blur="updateDocMeta(doc)">
+                                        </td>
+                                        <td>
+                                            <input type="text"
+                                                   x-model="doc.bates_start"
+                                                   class="table-input"
+                                                   placeholder="e.g., ABC001"
+                                                   @blur="updateDocMeta(doc)">
+                                        </td>
+                                        <td>
+                                            <input type="text"
+                                                   x-model="doc.bates_end"
+                                                   class="table-input"
+                                                   placeholder="e.g., ABC050"
+                                                   @blur="updateDocMeta(doc)">
+                                        </td>
+                                        <td>
+                                            <input type="text"
+                                                   x-model="doc.description"
+                                                   class="table-input"
+                                                   placeholder="Brief description"
+                                                   @blur="updateDocMeta(doc)">
+                                        </td>
+                                        <td style="text-align: center;">
+                                            <button class="btn-icon" @click="removeDocument(doc.id)" title="Remove">✕</button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </template>
+
+                <div class="actions-bar">
+                    <button class="btn btn-secondary" @click="goToStep(1)">← Back</button>
+                    <button class="btn btn-primary" @click="runAnalysis()" :disabled="analyzing">
+                        <template x-if="!analyzing">
+                            <span>Analyze with AI →</span>
+                        </template>
+                        <template x-if="analyzing">
+                            <span class="loading" style="padding: 0;">
+                                <span class="spinner"></span>
+                                Analyzing...
+                            </span>
+                        </template>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 3: Review & Edit -->
+            <div x-show="currentStep === 3" class="card">
+                <h2 class="card-title">Review AI Suggestions</h2>
+                <p style="color: var(--gray-600); margin-bottom: 1rem;">
+                    Review and edit the suggested objections and responsive documents for each request.
+                </p>
+
+                <div class="review-grid">
+                    <template x-for="request in session.requests" :key="request.id">
+                        <div class="review-request">
+                            <div class="review-request-header">
+                                <div class="request-header">
+                                    <span class="request-number">Request #<span x-text="request.number"></span></span>
+                                    <label style="margin-left: auto; display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                        <input type="checkbox" x-model="request.include_in_response">
+                                        Include in response
+                                    </label>
+                                </div>
+                                <div class="request-text" x-text="request.text"></div>
+                            </div>
+                            <div class="review-request-body">
+                                <!-- Objections -->
+                                <div class="review-section">
+                                    <div class="review-section-title">Objections</div>
+                                    <div class="checkbox-grid">
+                                        <template x-for="obj in objections" :key="obj.id">
+                                            <label class="checkbox-item"
+                                                   :class="{ 'selected': request.selected_objections.includes(obj.id) }"
+                                                   @click="toggleObjection(request, obj.id)">
+                                                <span x-text="obj.short_name"></span>
+                                            </label>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <!-- Responsive Documents -->
+                                <div class="review-section">
+                                    <div class="review-section-title">Responsive Documents</div>
+                                    <div class="multi-select">
+                                        <template x-for="doc in session.documents" :key="doc.id">
+                                            <label class="multi-select-item"
+                                                   :class="{ 'selected': request.selected_documents.includes(doc.id) }"
+                                                   @click="toggleDocument(request, doc.id)">
+                                                <span x-text="doc.filename"></span>
+                                            </label>
+                                        </template>
+                                    </div>
+                                    <div x-show="session.documents.length === 0" style="color: var(--gray-500); font-size: 0.875rem;">
+                                        No documents added
+                                    </div>
+                                </div>
+
+                                <!-- AI Notes -->
+                                <div class="review-section" x-show="request.ai_notes">
+                                    <div class="review-section-title">AI Notes</div>
+                                    <div class="ai-notes" x-text="request.ai_notes"></div>
+                                </div>
+
+                                <!-- User Notes -->
+                                <div class="review-section">
+                                    <div class="review-section-title">Your Notes</div>
+                                    <textarea
+                                        class="document-description"
+                                        placeholder="Add your notes..."
+                                        rows="2"
+                                        x-model="request.user_notes"
+                                        style="width: 100%;"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <div class="actions-bar">
+                    <button class="btn btn-secondary" @click="goToStep(2)">← Back</button>
+                    <button class="btn btn-primary" @click="saveAndContinue()">
+                        Save & Continue →
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 4: Generate -->
+            <div x-show="currentStep === 4" class="card">
+                <h2 class="card-title">Generate Response Document</h2>
+
+                <div class="alert alert-info">
+                    Ready to generate your RFP response document with:
+                    <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+                        <li><span x-text="session.requests.filter(r => r.include_in_response).length"></span> requests included</li>
+                        <li><span x-text="session.documents.length"></span> responsive documents referenced</li>
+                    </ul>
+                </div>
+
+                <div style="text-align: center; padding: 2rem;">
+                    <button class="btn btn-success" style="font-size: 1rem; padding: 1rem 2rem;"
+                            @click="generateDocument()" :disabled="generating">
+                        <template x-if="!generating">
+                            <span>📄 Generate Word Document</span>
+                        </template>
+                        <template x-if="generating">
+                            <span class="loading" style="padding: 0;">
+                                <span class="spinner"></span>
+                                Generating...
+                            </span>
+                        </template>
+                    </button>
+                </div>
+
+                <div class="actions-bar">
+                    <button class="btn btn-secondary" @click="goToStep(3)">← Back to Review</button>
+                    <button class="btn btn-secondary" @click="startOver()">Start New Session</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function app() {
+            return {
+                currentStep: 1,
+                isDragging: false,
+                uploading: false,
+                analyzing: false,
+                generating: false,
+                error: null,
+
+                session: {
+                    id: null,
+                    requests: [],
+                    documents: [],
+                    analysis_complete: false
+                },
+
+                objections: [],
+
+                async init() {
+                    // Load objection presets
+                    try {
+                        const data = await API.getObjectionPresets();
+                        this.objections = data.objections || [];
+                    } catch (e) {
+                        console.error('Failed to load objections:', e);
+                        // Use default objections if API fails
+                        this.objections = [
+                            { id: 'vague', name: 'Vague and Ambiguous', short_name: 'Vague' },
+                            { id: 'overbroad', name: 'Overbroad', short_name: 'Overbroad' },
+                            { id: 'unduly_burdensome', name: 'Unduly Burdensome', short_name: 'Burden' },
+                            { id: 'privilege', name: 'Attorney-Client Privilege', short_name: 'Privilege' },
+                            { id: 'work_product', name: 'Work Product', short_name: 'Work Product' },
+                            { id: 'relevance', name: 'Not Relevant', short_name: 'Relevance' },
+                            { id: 'compound', name: 'Compound', short_name: 'Compound' },
+                            { id: 'assumes_facts', name: 'Assumes Facts', short_name: 'Assumes Facts' }
+                        ];
+                    }
+                },
+
+                goToStep(step) {
+                    this.error = null;
+                    this.currentStep = step;
+                },
+
+                async handleRFPDrop(event) {
+                    this.isDragging = false;
+                    const files = event.dataTransfer.files;
+                    if (files.length > 0) {
+                        const file = files[0];
+                        const isPdf = file.type === 'application/pdf' ||
+                                      file.name.toLowerCase().endsWith('.pdf');
+                        if (isPdf) {
+                            await this.uploadRFP(file);
+                        } else {
+                            this.error = 'Please upload a PDF file';
+                        }
+                    }
+                },
+
+                async handleRFPSelect(event) {
+                    const files = event.target.files;
+                    if (files.length > 0) {
+                        await this.uploadRFP(files[0]);
+                    }
+                },
+
+                async uploadRFP(file) {
+                    this.uploading = true;
+                    this.error = null;
+
+                    try {
+                        const data = await API.uploadRFP(file, this.session.id);
+                        this.session.id = data.session_id;
+                        this.session.requests = data.requests.map(r => ({
+                            ...r,
+                            selected_objections: r.suggested_objections || [],
+                            selected_documents: r.suggested_documents || []
+                        }));
+                    } catch (e) {
+                        this.error = e.message;
+                    } finally {
+                        this.uploading = false;
+                    }
+                },
+
+                async handleDocsDrop(event) {
+                    this.isDragging = false;
+                    const files = Array.from(event.dataTransfer.files);
+                    await this.uploadDocuments(files);
+                },
+
+                async handleDocsSelect(event) {
+                    const files = Array.from(event.target.files);
+                    await this.uploadDocuments(files);
+                },
+
+                async uploadDocuments(files) {
+                    this.error = null;
+
+                    try {
+                        const data = await API.uploadDocuments(this.session.id, files);
+                        this.session.documents = [...this.session.documents, ...data.documents];
+                    } catch (e) {
+                        this.error = e.message;
+                    }
+                },
+
+                async updateDocMeta(doc) {
+                    try {
+                        await API.updateDocument(this.session.id, doc.id, {
+                            filename: doc.filename,
+                            bates_start: doc.bates_start,
+                            bates_end: doc.bates_end,
+                            description: doc.description
+                        });
+                    } catch (e) {
+                        console.error('Failed to update document:', e);
+                    }
+                },
+
+                async updateRequest(request) {
+                    try {
+                        await API.updateRequest(this.session.id, request.id, {
+                            number: request.number,
+                            text: request.text
+                        });
+                    } catch (e) {
+                        console.error('Failed to update request:', e);
+                    }
+                },
+
+                removeRequest(index) {
+                    this.session.requests.splice(index, 1);
+                },
+
+                addRequest() {
+                    const maxId = Math.max(0, ...this.session.requests.map(r => r.id));
+                    const maxNum = Math.max(0, ...this.session.requests.map(r => parseInt(r.number) || 0));
+                    this.session.requests.push({
+                        id: maxId + 1,
+                        number: String(maxNum + 1),
+                        text: '',
+                        raw_text: '',
+                        suggested_objections: [],
+                        suggested_documents: [],
+                        selected_objections: [],
+                        selected_documents: [],
+                        ai_notes: '',
+                        user_notes: '',
+                        include_in_response: true
+                    });
+                },
+
+                async saveRequestsAndContinue() {
+                    this.error = null;
+                    try {
+                        // Save all requests via bulk update
+                        const updates = {};
+                        this.session.requests.forEach(r => {
+                            updates[r.id] = {
+                                number: r.number,
+                                text: r.text
+                            };
+                        });
+                        await API.bulkUpdateRequests(this.session.id, updates);
+                        this.goToStep(2);
+                    } catch (e) {
+                        this.error = e.message;
+                    }
+                },
+
+                async removeDocument(docId) {
+                    try {
+                        await API.deleteDocument(this.session.id, docId);
+                        this.session.documents = this.session.documents.filter(d => d.id !== docId);
+                        // Remove from selected_documents in all requests
+                        this.session.requests.forEach(r => {
+                            r.selected_documents = r.selected_documents.filter(id => id !== docId);
+                        });
+                    } catch (e) {
+                        this.error = e.message;
+                    }
+                },
+
+                async runAnalysis() {
+                    this.analyzing = true;
+                    this.error = null;
+
+                    try {
+                        const data = await API.runAnalysis(this.session.id);
+
+                        // Update requests with suggestions
+                        if (data.suggestions) {
+                            this.session.requests.forEach(r => {
+                                const suggestion = data.suggestions[r.number] || data.suggestions[r.id];
+                                if (suggestion) {
+                                    r.suggested_objections = suggestion.objections || [];
+                                    r.suggested_documents = suggestion.documents || [];
+                                    r.ai_notes = suggestion.notes || '';
+                                    // Pre-fill selections with suggestions
+                                    r.selected_objections = [...r.suggested_objections];
+                                    r.selected_documents = [...r.suggested_documents];
+                                }
+                            });
+                        }
+
+                        this.session.analysis_complete = true;
+                        this.goToStep(3);
+                    } catch (e) {
+                        this.error = e.message;
+                        // Still go to step 3 even if analysis fails
+                        this.goToStep(3);
+                    } finally {
+                        this.analyzing = false;
+                    }
+                },
+
+                toggleObjection(request, objId) {
+                    const idx = request.selected_objections.indexOf(objId);
+                    if (idx >= 0) {
+                        request.selected_objections.splice(idx, 1);
+                    } else {
+                        request.selected_objections.push(objId);
+                    }
+                },
+
+                toggleDocument(request, docId) {
+                    const idx = request.selected_documents.indexOf(docId);
+                    if (idx >= 0) {
+                        request.selected_documents.splice(idx, 1);
+                    } else {
+                        request.selected_documents.push(docId);
+                    }
+                },
+
+                async saveAndContinue() {
+                    this.error = null;
+
+                    try {
+                        const updates = {};
+                        this.session.requests.forEach(r => {
+                            updates[r.id] = {
+                                selected_objections: r.selected_objections,
+                                selected_documents: r.selected_documents,
+                                user_notes: r.user_notes,
+                                include_in_response: r.include_in_response
+                            };
+                        });
+
+                        await API.bulkUpdateRequests(this.session.id, updates);
+                        this.goToStep(4);
+                    } catch (e) {
+                        this.error = e.message;
+                    }
+                },
+
+                async generateDocument() {
+                    this.generating = true;
+                    this.error = null;
+
+                    try {
+                        const blob = await API.generateResponse(this.session.id);
+
+                        // Download the file
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `rfp_response_${new Date().toISOString().slice(0, 10)}.docx`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                    } catch (e) {
+                        this.error = e.message;
+                    } finally {
+                        this.generating = false;
+                    }
+                },
+
+                startOver() {
+                    this.session = {
+                        id: null,
+                        requests: [],
+                        documents: [],
+                        analysis_complete: false
+                    };
+                    this.currentStep = 1;
+                    this.error = null;
+                }
+            };
+        }
+    </script>
+</body>
+</html>

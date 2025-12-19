@@ -1,0 +1,76 @@
+{
+    "id": "default",
+    "name": "Standard California Discovery Objections",
+    "objections": [
+        {
+            "id": "vague",
+            "name": "Vague and Ambiguous",
+            "short_name": "Vague",
+            "formal_language": "Responding Party objects to this Request as vague and ambiguous.",
+            "argument_template": "The terms used in this Request are susceptible to multiple interpretations and fail to provide Responding Party with adequate notice of what is sought."
+        },
+        {
+            "id": "overbroad",
+            "name": "Overbroad",
+            "short_name": "Overbroad",
+            "formal_language": "Responding Party objects to this Request as overbroad in scope.",
+            "argument_template": "This Request, as phrased, encompasses materials and information beyond the scope of proper discovery in this action and is not proportional to the needs of the case."
+        },
+        {
+            "id": "unduly_burdensome",
+            "name": "Unduly Burdensome",
+            "short_name": "Burden",
+            "formal_language": "Responding Party objects to this Request as unduly burdensome and oppressive.",
+            "argument_template": "Compliance with this Request would require an unreasonable expenditure of time and resources disproportionate to the needs of this case and the likely benefit of the information sought."
+        },
+        {
+            "id": "privilege",
+            "name": "Attorney-Client Privilege",
+            "short_name": "Privilege",
+            "formal_language": "Responding Party objects to this Request to the extent it seeks information protected by the attorney-client privilege.",
+            "argument_template": "The requested materials include confidential communications between Responding Party and legal counsel made for the purpose of obtaining legal advice, which are privileged and protected from disclosure."
+        },
+        {
+            "id": "work_product",
+            "name": "Work Product Doctrine",
+            "short_name": "Work Product",
+            "formal_language": "Responding Party objects to this Request to the extent it seeks materials protected by the attorney work product doctrine.",
+            "argument_template": "The requested materials include documents prepared in anticipation of litigation or for trial by or for Responding Party's attorneys, which are protected from disclosure under the work product doctrine."
+        },
+        {
+            "id": "relevance",
+            "name": "Not Relevant",
+            "short_name": "Relevance",
+            "formal_language": "Responding Party objects to this Request as seeking information not relevant to the subject matter of this action and not proportional to the needs of the case.",
+            "argument_template": "The information sought is not relevant to any party's claim or defense and is not reasonably calculated to lead to the discovery of admissible evidence."
+        },
+        {
+            "id": "compound",
+            "name": "Compound",
+            "short_name": "Compound",
+            "formal_language": "Responding Party objects to this Request as compound.",
+            "argument_template": "This Request contains multiple discrete sub-parts and categories that should be propounded as separate requests for production."
+        },
+        {
+            "id": "assumes_facts",
+            "name": "Assumes Facts Not in Evidence",
+            "short_name": "Assumes Facts",
+            "formal_language": "Responding Party objects to this Request as assuming facts not in evidence.",
+            "argument_template": "This Request is premised on disputed factual assertions that Responding Party does not accept as true and which have not been established in this action."
+        },
+        {
+            "id": "proprietary",
+            "name": "Proprietary/Confidential",
+            "short_name": "Proprietary",
+            "formal_language": "Responding Party objects to this Request to the extent it seeks proprietary, confidential, or trade secret information.",
+            "argument_template": "The requested materials contain proprietary business information, trade secrets, or other confidential information that requires protection from disclosure."
+        },
+        {
+            "id": "already_produced",
+            "name": "Already Produced/Available",
+            "short_name": "Already Produced",
+            "formal_language": "Responding Party objects to this Request as seeking documents already produced or equally available to the propounding party.",
+            "argument_template": "The documents sought have already been produced in this litigation or are equally available to the propounding party from other sources."
+        }
+    ]
+}

@@ -43,3 +43,11 @@ Thumbs.db
 *.tmp
 temp/
 tmp/
+
+# RFP Response Tool data
+data/
+*.docx.tmp
+
+# Environment variables
+.env
+.env.local
