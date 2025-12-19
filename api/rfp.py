@@ -3,7 +3,8 @@ import uuid
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
 from services.session_store import session_store
-from services.pdf_parser import parse_rfp
+from services.pdf_parser import parse_rfp, extract_first_page_text
+from services.claude_service import claude_service
 from config import Config
 
 rfp_bp = Blueprint('rfp', __name__, url_prefix='/api/rfp')
@@ -66,10 +67,21 @@ def upload_rfp():
                 'session_id': session.id
             }), 422
 
+        # Extract case info from first page
+        case_info = None
+        try:
+            first_page_text = extract_first_page_text(file_path)
+            if first_page_text:
+                case_info = claude_service.extract_case_info(first_page_text)
+        except Exception as e:
+            print(f"Case info extraction failed: {e}")
+            # Continue without case info - it can be extracted later
+
         # Update session
         session.rfp_filename = filename
         session.rfp_file_path = file_path
         session.requests = requests_list
+        session.case_info = case_info
         session_store.update(session)
 
         return jsonify({
@@ -77,7 +89,8 @@ def upload_rfp():
             'rfp_filename': filename,
             'total_requests': len(requests_list),
             'parser_used': parser_used,
-            'requests': [r.to_dict() for r in requests_list]
+            'requests': [r.to_dict() for r in requests_list],
+            'case_info': case_info
         }), 200
 
     except Exception as e:
@@ -206,3 +219,106 @@ def bulk_update_requests(session_id):
         'message': f'Updated {updated_count} requests',
         'updated_count': updated_count
     })
+
+
+@rfp_bp.route('/<session_id>/case-info', methods=['GET'])
+def get_case_info(session_id):
+    """Get extracted case information for a session."""
+    session = session_store.get(session_id)
+    if not session:
+        return jsonify({'error': 'Session not found'}), 404
+
+    return jsonify({
+        'session_id': session_id,
+        'case_info': session.case_info
+    })
+
+
+@rfp_bp.route('/<session_id>/case-info', methods=['PUT'])
+def update_case_info(session_id):
+    """
+    Update case information manually.
+
+    Accepts JSON body with any of:
+    - court_name
+    - header_plaintiffs
+    - header_defendants
+    - case_no
+    - propounding_party
+    - responding_party
+    - set_number
+    """
+    session = session_store.get(session_id)
+    if not session:
+        return jsonify({'error': 'Session not found'}), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    # Initialize case_info if it doesn't exist
+    if session.case_info is None:
+        session.case_info = {
+            'court_name': '',
+            'header_plaintiffs': '',
+            'header_defendants': '',
+            'case_no': '',
+            'propounding_party': '',
+            'responding_party': '',
+            'set_number': 'ONE'
+        }
+
+    # Update provided fields
+    allowed_fields = [
+        'court_name', 'header_plaintiffs', 'header_defendants',
+        'case_no', 'propounding_party', 'responding_party', 'set_number'
+    ]
+    for field in allowed_fields:
+        if field in data:
+            session.case_info[field] = data[field]
+
+    session_store.update(session)
+
+    return jsonify({
+        'message': 'Case info updated',
+        'case_info': session.case_info
+    })
+
+
+@rfp_bp.route('/<session_id>/case-info/extract', methods=['POST'])
+def extract_case_info(session_id):
+    """
+    Re-extract case information from the uploaded RFP PDF using Claude.
+
+    Useful if extraction failed during upload or to refresh the extraction.
+    """
+    session = session_store.get(session_id)
+    if not session:
+        return jsonify({'error': 'Session not found'}), 404
+
+    if not session.rfp_file_path or not os.path.exists(session.rfp_file_path):
+        return jsonify({'error': 'No RFP file found for this session'}), 404
+
+    try:
+        first_page_text = extract_first_page_text(session.rfp_file_path)
+        if not first_page_text:
+            return jsonify({
+                'error': 'Could not extract text from PDF',
+                'message': 'The first page appears to be empty or unreadable.'
+            }), 422
+
+        case_info = claude_service.extract_case_info(first_page_text)
+
+        session.case_info = case_info
+        session_store.update(session)
+
+        return jsonify({
+            'message': 'Case info extracted successfully',
+            'case_info': case_info
+        })
+
+    except Exception as e:
+        return jsonify({
+            'error': 'Failed to extract case info',
+            'message': str(e)
+        }), 500

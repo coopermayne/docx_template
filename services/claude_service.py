@@ -85,6 +85,45 @@ class ClaudeService:
         }
     }
 
+    EXTRACT_CASE_INFO_TOOL = {
+        "name": "submit_case_info",
+        "description": "Submit the extracted case information from a legal document",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "court_name": {
+                    "type": "string",
+                    "description": "Full name of the court (e.g., 'Superior Court of California, County of Los Angeles')"
+                },
+                "header_plaintiffs": {
+                    "type": "string",
+                    "description": "Plaintiff name(s) as they appear in the case caption"
+                },
+                "header_defendants": {
+                    "type": "string",
+                    "description": "Defendant name(s) as they appear in the case caption"
+                },
+                "case_no": {
+                    "type": "string",
+                    "description": "Case number (e.g., 'BC123456', '2:24-cv-01234')"
+                },
+                "propounding_party": {
+                    "type": "string",
+                    "description": "The party who sent/propounded the discovery requests"
+                },
+                "responding_party": {
+                    "type": "string",
+                    "description": "The party who must respond to the discovery requests"
+                },
+                "set_number": {
+                    "type": "string",
+                    "description": "The set number of the requests (e.g., 'ONE', 'TWO', 'FIRST', 'SECOND')"
+                }
+            },
+            "required": ["court_name", "header_plaintiffs", "header_defendants", "case_no", "propounding_party", "responding_party"]
+        }
+    }
+
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or Config.ANTHROPIC_API_KEY
         self.model = Config.CLAUDE_MODEL
@@ -96,6 +135,166 @@ class ClaudeService:
     def is_available(self) -> bool:
         """Check if Claude API is available."""
         return self.client is not None
+
+    def extract_case_info(self, first_page_text: str) -> Dict[str, str]:
+        """
+        Extract case information from the first page of an RFP document.
+
+        Args:
+            first_page_text: Text content from the first page of the RFP
+
+        Returns:
+            Dictionary with extracted case information:
+            {
+                "court_name": "...",
+                "header_plaintiffs": "...",
+                "header_defendants": "...",
+                "case_no": "...",
+                "propounding_party": "...",
+                "responding_party": "...",
+                "set_number": "..."
+            }
+        """
+        if not self.is_available():
+            return self._fallback_extract_case_info(first_page_text)
+
+        prompt = f"""You are a legal assistant extracting case information from the first page of a legal discovery document (Request for Production of Documents).
+
+## Document Text:
+{first_page_text}
+
+## Instructions:
+Extract the following information from the document:
+
+1. **court_name**: The full name of the court (e.g., "Superior Court of California, County of Los Angeles", "United States District Court, Central District of California")
+
+2. **header_plaintiffs**: The plaintiff name(s) exactly as they appear in the case caption. If multiple plaintiffs, include all of them.
+
+3. **header_defendants**: The defendant name(s) exactly as they appear in the case caption. If multiple defendants, include all of them.
+
+4. **case_no**: The case number exactly as it appears (e.g., "BC123456", "2:24-cv-01234-ABC")
+
+5. **propounding_party**: The party who is sending/propounding these discovery requests (the one asking for documents). This is usually indicated by language like "Plaintiff's Request" or "Defendant's Request" or "[Party Name]'s Request for Production".
+
+6. **responding_party**: The party who must respond to these requests (the one who must produce documents). This is the opposing party to the propounding party.
+
+7. **set_number**: The set number of the requests if specified (e.g., "ONE", "TWO", "FIRST", "SECOND"). If not specified, use "ONE".
+
+If any field cannot be determined from the document, provide your best guess based on context or use a sensible default.
+
+Call the submit_case_info tool with the extracted information.
+"""
+
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=1000,
+                tools=[self.EXTRACT_CASE_INFO_TOOL],
+                tool_choice={"type": "tool", "name": "submit_case_info"},
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+
+            # Extract the tool use response
+            for block in response.content:
+                if block.type == "tool_use" and block.name == "submit_case_info":
+                    result = block.input
+                    # Ensure all expected keys exist with defaults
+                    return {
+                        "court_name": result.get("court_name", "Superior Court of California"),
+                        "header_plaintiffs": result.get("header_plaintiffs", "PLAINTIFF"),
+                        "header_defendants": result.get("header_defendants", "DEFENDANT"),
+                        "case_no": result.get("case_no", ""),
+                        "propounding_party": result.get("propounding_party", "Propounding Party"),
+                        "responding_party": result.get("responding_party", "Responding Party"),
+                        "set_number": result.get("set_number", "ONE")
+                    }
+
+            # Fallback if no tool use found
+            return self._fallback_extract_case_info(first_page_text)
+
+        except Exception as e:
+            print(f"Claude API error in extract_case_info: {e}")
+            return self._fallback_extract_case_info(first_page_text)
+
+    def _fallback_extract_case_info(self, text: str) -> Dict[str, str]:
+        """Fallback extraction using regex patterns when Claude is unavailable."""
+        import re
+
+        result = {
+            "court_name": "Superior Court of California",
+            "header_plaintiffs": "PLAINTIFF",
+            "header_defendants": "DEFENDANT",
+            "case_no": "",
+            "propounding_party": "Propounding Party",
+            "responding_party": "Responding Party",
+            "set_number": "ONE"
+        }
+
+        text_upper = text.upper()
+
+        # Try to extract case number
+        case_no_patterns = [
+            r'CASE\s*(?:NO\.?|NUMBER|#)[:\s]*([A-Z0-9\-:]+)',
+            r'(?:NO\.?|NUMBER|#)[:\s]*([A-Z]{1,3}\d{5,})',
+            r'(\d+:\d+-[A-Za-z]+-\d+-[A-Z]+)',  # Federal format
+        ]
+        for pattern in case_no_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                result["case_no"] = match.group(1).strip()
+                break
+
+        # Try to extract court name
+        court_patterns = [
+            r'(SUPERIOR\s+COURT\s+OF\s+[A-Z\s,]+)',
+            r'(UNITED\s+STATES\s+DISTRICT\s+COURT[A-Z\s,]+)',
+            r'(CIRCUIT\s+COURT\s+OF\s+[A-Z\s,]+)',
+        ]
+        for pattern in court_patterns:
+            match = re.search(pattern, text_upper)
+            if match:
+                # Title case the result
+                result["court_name"] = match.group(1).strip().title()
+                break
+
+        # Try to detect plaintiff/defendant from "vs" or "v."
+        vs_pattern = r'([A-Z][A-Za-z\s,\.]+?)\s+(?:vs\.?|v\.)\s+([A-Z][A-Za-z\s,\.]+?)(?:\n|CASE|$)'
+        match = re.search(vs_pattern, text)
+        if match:
+            result["header_plaintiffs"] = match.group(1).strip()
+            result["header_defendants"] = match.group(2).strip()
+
+        # Try to detect propounding party
+        propounding_patterns = [
+            r"(PLAINTIFF'?S?|DEFENDANT'?S?)\s+(?:FIRST\s+)?(?:SET\s+OF\s+)?REQUEST",
+            r"REQUEST.*BY\s+(PLAINTIFF|DEFENDANT)",
+        ]
+        for pattern in propounding_patterns:
+            match = re.search(pattern, text_upper)
+            if match:
+                party = match.group(1).replace("'S", "").replace("S", "").strip()
+                if "PLAINTIFF" in party:
+                    result["propounding_party"] = result["header_plaintiffs"]
+                    result["responding_party"] = result["header_defendants"]
+                else:
+                    result["propounding_party"] = result["header_defendants"]
+                    result["responding_party"] = result["header_plaintiffs"]
+                break
+
+        # Try to extract set number
+        set_patterns = [
+            r'(?:SET\s+(?:NO\.?\s*)?)(ONE|TWO|THREE|FOUR|FIVE|FIRST|SECOND|THIRD|FOURTH|FIFTH|\d+)',
+            r'(FIRST|SECOND|THIRD|FOURTH|FIFTH)\s+SET',
+        ]
+        for pattern in set_patterns:
+            match = re.search(pattern, text_upper)
+            if match:
+                result["set_number"] = match.group(1).strip()
+                break
+
+        return result
 
     def analyze_requests(
         self,

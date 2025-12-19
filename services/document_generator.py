@@ -56,13 +56,28 @@ class DocumentGenerator:
         documents_map = {doc.id: doc for doc in session.documents}
 
         # Build context for template
+        # Create short versions for document properties (255 char limit)
+        def truncate_name(name: str, max_len: int = 50) -> str:
+            """Truncate a name, trying to keep it meaningful."""
+            if len(name) <= max_len:
+                return name
+            # Try to cut at a sensible point (semicolon, comma, or space)
+            for sep in [';', ',', ' ']:
+                if sep in name[:max_len]:
+                    idx = name[:max_len].rfind(sep)
+                    if idx > 10:  # Don't truncate too short
+                        return name[:idx].strip() + ', et al.'
+            return name[:max_len-3] + '...'
+
         context = {
             'court_name': court_name,
             'header_plaintiffs': header_plaintiffs,
             'header_defendants': header_defendants,
             'case_no': case_no,
             'client_name': client_name,
+            'client_name_short': truncate_name(client_name),
             'requesting_party': requesting_party,
+            'requesting_party_short': truncate_name(requesting_party),
             'propounding_party': propounding_party,
             'responding_party': responding_party,
             'set_number': set_number,

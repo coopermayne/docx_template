@@ -32,15 +32,21 @@ def generate_response(session_id):
 
     # Get optional parameters (silent=True prevents 415 error when no JSON body)
     data = request.get_json(silent=True) or {}
-    court_name = data.get('court_name', 'Superior Court of California')
-    header_plaintiffs = data.get('header_plaintiffs', 'PLAINTIFF')
-    header_defendants = data.get('header_defendants', 'DEFENDANT')
-    case_no = data.get('case_no', '')
-    client_name = data.get('client_name', 'Plaintiff')
-    requesting_party = data.get('requesting_party', 'Defendant')
-    propounding_party = data.get('propounding_party', 'Propounding Party')
-    responding_party = data.get('responding_party', 'Responding Party')
-    set_number = data.get('set_number', 'ONE')
+
+    # Use session's extracted case_info as fallback, then hardcoded defaults
+    case_info = session.case_info or {}
+
+    court_name = data.get('court_name') or case_info.get('court_name') or 'Superior Court of California'
+    header_plaintiffs = data.get('header_plaintiffs') or case_info.get('header_plaintiffs') or 'PLAINTIFF'
+    header_defendants = data.get('header_defendants') or case_info.get('header_defendants') or 'DEFENDANT'
+    case_no = data.get('case_no') or case_info.get('case_no') or ''
+    propounding_party = data.get('propounding_party') or case_info.get('propounding_party') or 'Propounding Party'
+    responding_party = data.get('responding_party') or case_info.get('responding_party') or 'Responding Party'
+    set_number = data.get('set_number') or case_info.get('set_number') or 'ONE'
+
+    # These may not be in case_info, so just use request data or defaults
+    client_name = data.get('client_name') or header_plaintiffs
+    requesting_party = data.get('requesting_party') or propounding_party
 
     try:
         # Generate document

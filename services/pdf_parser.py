@@ -173,3 +173,34 @@ def parse_rfp(pdf_path: str) -> Tuple[List[RFPRequest], str]:
         pass
 
     return [], 'none'
+
+
+def extract_first_page_text(pdf_path: str) -> str:
+    """
+    Extract text from the first page of a PDF.
+
+    Args:
+        pdf_path: Path to the PDF file
+
+    Returns:
+        Text content from the first page
+    """
+    try:
+        reader = PdfReader(pdf_path)
+        if reader.pages:
+            text = reader.pages[0].extract_text()
+            return text if text else ""
+    except Exception as e:
+        print(f"Error extracting first page: {e}")
+
+    # Fallback to pdfplumber
+    try:
+        import pdfplumber
+        with pdfplumber.open(pdf_path) as pdf:
+            if pdf.pages:
+                text = pdf.pages[0].extract_text()
+                return text if text else ""
+    except Exception as e:
+        print(f"Fallback extraction failed: {e}")
+
+    return ""

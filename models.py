@@ -112,6 +112,8 @@ class Session:
     analysis_error: Optional[str] = None
     # Objection preset
     objection_preset_id: str = "default"
+    # Extracted case information
+    case_info: Optional[Dict[str, str]] = None
 
     @classmethod
     def create_new(cls) -> 'Session':
@@ -134,7 +136,8 @@ class Session:
             'documents': [d.to_dict() for d in self.documents],
             'analysis_complete': self.analysis_complete,
             'analysis_error': self.analysis_error,
-            'objection_preset_id': self.objection_preset_id
+            'objection_preset_id': self.objection_preset_id,
+            'case_info': self.case_info
         }
 
     @classmethod
@@ -149,7 +152,8 @@ class Session:
             documents=[Document.from_dict(d) for d in data.get('documents', [])],
             analysis_complete=data.get('analysis_complete', False),
             analysis_error=data.get('analysis_error'),
-            objection_preset_id=data.get('objection_preset_id', 'default')
+            objection_preset_id=data.get('objection_preset_id', 'default'),
+            case_info=data.get('case_info')
         )
 
     def touch(self) -> None:
