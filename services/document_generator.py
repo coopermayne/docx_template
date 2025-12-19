@@ -23,9 +23,14 @@ class DocumentGenerator:
         case_no: str = "",
         client_name: str = "Plaintiff",
         requesting_party: str = "Defendant",
-        propounding_party: str = "Propounding Party",
-        responding_party: str = "Responding Party",
-        set_number: str = "ONE"
+        propounding_party: str = "Defendant",
+        responding_party: str = "Plaintiff",
+        set_number: str = "ONE",
+        document_title: str = "",
+        multiple_plaintiffs: bool = False,
+        multiple_defendants: bool = False,
+        multiple_propounding_parties: bool = False,
+        multiple_responding_parties: bool = False
     ) -> str:
         """
         Generate an RFP response document.
@@ -38,9 +43,14 @@ class DocumentGenerator:
             case_no: Case number
             client_name: Name of the client/plaintiff
             requesting_party: Name of the party requesting production
-            propounding_party: Name of the propounding party
-            responding_party: Name of the responding party
+            propounding_party: Name of the propounding party (starts with Defendant/Defendants)
+            responding_party: Name of the responding party (starts with Plaintiff/Plaintiffs)
             set_number: The set number (e.g., "ONE", "TWO")
+            document_title: The formal document title for the response
+            multiple_plaintiffs: True if multiple plaintiffs in case caption
+            multiple_defendants: True if multiple defendants in case caption
+            multiple_propounding_parties: True if RFP propounded by multiple defendants
+            multiple_responding_parties: True if RFP addressed to multiple plaintiffs
 
         Returns:
             Path to the generated document
@@ -69,6 +79,10 @@ class DocumentGenerator:
                         return name[:idx].strip() + ', et al.'
             return name[:max_len-3] + '...'
 
+        # Generate default document title if not provided
+        if not document_title:
+            document_title = f"{responding_party.upper()}'S RESPONSES TO {propounding_party.upper()}'S {set_number} SET OF REQUESTS FOR PRODUCTION OF DOCUMENTS"
+
         context = {
             'court_name': court_name,
             'header_plaintiffs': header_plaintiffs,
@@ -79,8 +93,14 @@ class DocumentGenerator:
             'requesting_party': requesting_party,
             'requesting_party_short': truncate_name(requesting_party),
             'propounding_party': propounding_party,
+            'propounding_party_or_parties': "Defendants" if multiple_propounding_parties else "Defendant",
             'responding_party': responding_party,
             'set_number': set_number,
+            'document_title': document_title,
+            'multiple_plaintiffs': multiple_plaintiffs,
+            'multiple_defendants': multiple_defendants,
+            'multiple_propounding_parties': multiple_propounding_parties,
+            'multiple_responding_parties': multiple_responding_parties,
             'date': datetime.now().strftime('%B %d, %Y'),
             'requests': []
         }

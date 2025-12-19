@@ -118,9 +118,33 @@ class ClaudeService:
                 "set_number": {
                     "type": "string",
                     "description": "The set number of the requests (e.g., 'ONE', 'TWO', 'FIRST', 'SECOND')"
+                },
+                "document_title": {
+                    "type": "string",
+                    "description": "A formal document title for the response (e.g., 'PLAINTIFF SMITH'S RESPONSES TO DEFENDANT ACME CORP.'S FIRST SET OF REQUESTS FOR PRODUCTION OF DOCUMENTS')"
+                },
+                "filename": {
+                    "type": "string",
+                    "description": "A filename for the response document (ALL CAPS, no date, no file extension). Should be a shortened version of the document title safe for filesystems. Example: 'SMITH RESPONSES TO ACME RFP SET ONE'"
+                },
+                "multiple_plaintiffs": {
+                    "type": "boolean",
+                    "description": "True if there are multiple plaintiffs listed in the case caption, false if only one plaintiff"
+                },
+                "multiple_defendants": {
+                    "type": "boolean",
+                    "description": "True if there are multiple defendants listed in the case caption, false if only one defendant"
+                },
+                "multiple_propounding_parties": {
+                    "type": "boolean",
+                    "description": "True if the RFP is being propounded by multiple defendants, false if only one"
+                },
+                "multiple_responding_parties": {
+                    "type": "boolean",
+                    "description": "True if the RFP is addressed to multiple plaintiffs, false if addressed to only one plaintiff"
                 }
             },
-            "required": ["court_name", "header_plaintiffs", "header_defendants", "case_no", "propounding_party", "responding_party"]
+            "required": ["court_name", "header_plaintiffs", "header_defendants", "case_no", "propounding_party", "responding_party", "document_title", "filename", "multiple_plaintiffs", "multiple_defendants", "multiple_propounding_parties", "multiple_responding_parties"]
         }
     }
 
@@ -174,11 +198,23 @@ Extract the following information from the document:
 
 4. **case_no**: The case number exactly as it appears (e.g., "BC123456", "2:24-cv-01234-ABC")
 
-5. **propounding_party**: The party who is sending/propounding these discovery requests (the one asking for documents). This is usually indicated by language like "Plaintiff's Request" or "Defendant's Request" or "[Party Name]'s Request for Production".
+5. **propounding_party**: Extract this exactly as written in the RFP document - look for who is propounding/sending the discovery requests. Copy the party designation as it appears (e.g., "Defendant ACME Corp.", "Defendants ACME Corp. and XYZ Inc.", or however it's stated in the document).
 
-6. **responding_party**: The party who must respond to these requests (the one who must produce documents). This is the opposing party to the propounding party.
+6. **responding_party**: Extract this exactly as written in the RFP document - look for who the requests are directed to. Copy the party designation as it appears (e.g., "Plaintiff John Smith", "Plaintiffs Smith and Doe", or however it's stated in the document).
 
-7. **set_number**: The set number of the requests if specified (e.g., "ONE", "TWO", "FIRST", "SECOND"). If not specified, use "ONE".
+7. **set_number**: Look at the document title/heading to determine the set number (e.g., "FIRST SET", "SECOND SET", "SET ONE", "SET TWO"). Use ordinal form: "ONE", "TWO", "THREE", etc. If not clearly specified in the document, default to "ONE".
+
+8. **document_title**: Generate a formal document title for the RESPONSE document. Format: "[RESPONDING PARTY]'S RESPONSES TO [PROPOUNDING PARTY]'S [SET NUMBER] SET OF REQUESTS FOR PRODUCTION OF DOCUMENTS". For example: "PLAINTIFF JOHN SMITH'S RESPONSES TO DEFENDANT ACME CORP.'S FIRST SET OF REQUESTS FOR PRODUCTION OF DOCUMENTS". Use ordinal words for set number (FIRST, SECOND, THIRD, etc.).
+
+9. **filename**: Generate a short filename for the document (ALL CAPS, no date, no file extension). This should be a condensed version of the document title that's safe for filesystems - avoid special characters like colons, slashes, quotes. Example: "SMITH RESPONSES TO ACME RFP SET ONE" or "JONES RESPONSES TO XYZ CORP RFP SET TWO".
+
+10. **multiple_plaintiffs**: Set to true if there are multiple plaintiffs listed in the case caption (e.g., "John Smith and Jane Doe" or "John Smith, et al."), false if only one plaintiff.
+
+11. **multiple_defendants**: Set to true if there are multiple defendants listed in the case caption, false if only one defendant.
+
+12. **multiple_propounding_parties**: Set to true if the RFP document indicates it is being propounded by multiple defendants (look at who signed or is named as the requesting party), false if only one defendant is propounding.
+
+13. **multiple_responding_parties**: Set to true if the RFP is addressed to multiple plaintiffs (look at who the requests are directed to), false if addressed to only one plaintiff. Note: A case may have multiple plaintiffs but the RFP might only be addressed to one of them.
 
 If any field cannot be determined from the document, provide your best guess based on context or use a sensible default.
 
@@ -201,14 +237,25 @@ Call the submit_case_info tool with the extracted information.
                 if block.type == "tool_use" and block.name == "submit_case_info":
                     result = block.input
                     # Ensure all expected keys exist with defaults
+                    responding = result.get("responding_party", "Plaintiff")
+                    propounding = result.get("propounding_party", "Defendant")
+                    set_num = result.get("set_number", "ONE")
+                    default_title = f"{responding.upper()}'S RESPONSES TO {propounding.upper()}'S {set_num} SET OF REQUESTS FOR PRODUCTION OF DOCUMENTS"
+                    default_filename = f"{responding.upper()} RESPONSES TO {propounding.upper()} RFP SET {set_num}"
                     return {
                         "court_name": result.get("court_name", "Superior Court of California"),
                         "header_plaintiffs": result.get("header_plaintiffs", "PLAINTIFF"),
                         "header_defendants": result.get("header_defendants", "DEFENDANT"),
                         "case_no": result.get("case_no", ""),
-                        "propounding_party": result.get("propounding_party", "Propounding Party"),
-                        "responding_party": result.get("responding_party", "Responding Party"),
-                        "set_number": result.get("set_number", "ONE")
+                        "propounding_party": propounding,
+                        "responding_party": responding,
+                        "set_number": set_num,
+                        "document_title": result.get("document_title", default_title),
+                        "filename": result.get("filename", default_filename),
+                        "multiple_plaintiffs": result.get("multiple_plaintiffs", False),
+                        "multiple_defendants": result.get("multiple_defendants", False),
+                        "multiple_propounding_parties": result.get("multiple_propounding_parties", False),
+                        "multiple_responding_parties": result.get("multiple_responding_parties", False)
                     }
 
             # Fallback if no tool use found
@@ -227,9 +274,15 @@ Call the submit_case_info tool with the extracted information.
             "header_plaintiffs": "PLAINTIFF",
             "header_defendants": "DEFENDANT",
             "case_no": "",
-            "propounding_party": "Propounding Party",
-            "responding_party": "Responding Party",
-            "set_number": "ONE"
+            "propounding_party": "Defendant",
+            "responding_party": "Plaintiff",
+            "set_number": "ONE",
+            "document_title": "PLAINTIFF'S RESPONSES TO DEFENDANT'S FIRST SET OF REQUESTS FOR PRODUCTION OF DOCUMENTS",
+            "filename": "PLAINTIFF RESPONSES TO DEFENDANT RFP SET ONE",
+            "multiple_plaintiffs": False,
+            "multiple_defendants": False,
+            "multiple_propounding_parties": False,
+            "multiple_responding_parties": False
         }
 
         text_upper = text.upper()
@@ -266,22 +319,31 @@ Call the submit_case_info tool with the extracted information.
             result["header_plaintiffs"] = match.group(1).strip()
             result["header_defendants"] = match.group(2).strip()
 
-        # Try to detect propounding party
-        propounding_patterns = [
-            r"(PLAINTIFF'?S?|DEFENDANT'?S?)\s+(?:FIRST\s+)?(?:SET\s+OF\s+)?REQUEST",
-            r"REQUEST.*BY\s+(PLAINTIFF|DEFENDANT)",
-        ]
-        for pattern in propounding_patterns:
-            match = re.search(pattern, text_upper)
-            if match:
-                party = match.group(1).replace("'S", "").replace("S", "").strip()
-                if "PLAINTIFF" in party:
-                    result["propounding_party"] = result["header_plaintiffs"]
-                    result["responding_party"] = result["header_defendants"]
-                else:
-                    result["propounding_party"] = result["header_defendants"]
-                    result["responding_party"] = result["header_plaintiffs"]
-                break
+        # Detect if multiple plaintiffs or defendants in case caption
+        plaintiffs = result["header_plaintiffs"]
+        defendants = result["header_defendants"]
+        multiple_plaintiffs = any(sep in plaintiffs.lower() for sep in [',', ';', ' and ', 'et al'])
+        multiple_defendants = any(sep in defendants.lower() for sep in [',', ';', ' and ', 'et al'])
+
+        result["multiple_plaintiffs"] = multiple_plaintiffs
+        result["multiple_defendants"] = multiple_defendants
+
+        # Build propounding_party (Defendant(s)) and responding_party (Plaintiff(s))
+        # RFPs are sent by defendants to plaintiffs
+        # For fallback, assume same as case caption (can't determine from regex who RFP is addressed to)
+        if multiple_defendants:
+            result["propounding_party"] = f"Defendants {defendants}"
+            result["multiple_propounding_parties"] = True
+        else:
+            result["propounding_party"] = f"Defendant {defendants}"
+            result["multiple_propounding_parties"] = False
+
+        if multiple_plaintiffs:
+            result["responding_party"] = f"Plaintiffs {plaintiffs}"
+            result["multiple_responding_parties"] = True
+        else:
+            result["responding_party"] = f"Plaintiff {plaintiffs}"
+            result["multiple_responding_parties"] = False
 
         # Try to extract set number
         set_patterns = [
@@ -293,6 +355,15 @@ Call the submit_case_info tool with the extracted information.
             if match:
                 result["set_number"] = match.group(1).strip()
                 break
+
+        # Convert numeric set numbers to ordinal words
+        set_num_map = {"1": "FIRST", "2": "SECOND", "3": "THIRD", "4": "FOURTH", "5": "FIFTH",
+                       "ONE": "FIRST", "TWO": "SECOND", "THREE": "THIRD", "FOUR": "FOURTH", "FIVE": "FIFTH"}
+        set_ordinal = set_num_map.get(result["set_number"].upper(), result["set_number"].upper())
+
+        # Generate document title and filename from extracted info
+        result["document_title"] = f"{result['responding_party'].upper()}'S RESPONSES TO {result['propounding_party'].upper()}'S {set_ordinal} SET OF REQUESTS FOR PRODUCTION OF DOCUMENTS"
+        result["filename"] = f"{result['responding_party'].upper()} RESPONSES TO {result['propounding_party'].upper()} RFP SET {result['set_number']}"
 
         return result
 

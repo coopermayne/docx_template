@@ -40,15 +40,24 @@ def generate_response(session_id):
     header_plaintiffs = data.get('header_plaintiffs') or case_info.get('header_plaintiffs') or 'PLAINTIFF'
     header_defendants = data.get('header_defendants') or case_info.get('header_defendants') or 'DEFENDANT'
     case_no = data.get('case_no') or case_info.get('case_no') or ''
-    propounding_party = data.get('propounding_party') or case_info.get('propounding_party') or 'Propounding Party'
-    responding_party = data.get('responding_party') or case_info.get('responding_party') or 'Responding Party'
+    propounding_party = data.get('propounding_party') or case_info.get('propounding_party') or 'Defendant'
+    responding_party = data.get('responding_party') or case_info.get('responding_party') or 'Plaintiff'
     set_number = data.get('set_number') or case_info.get('set_number') or 'ONE'
+    document_title = data.get('document_title') or case_info.get('document_title') or ''
+    multiple_plaintiffs = data.get('multiple_plaintiffs') if 'multiple_plaintiffs' in data else case_info.get('multiple_plaintiffs', False)
+    multiple_defendants = data.get('multiple_defendants') if 'multiple_defendants' in data else case_info.get('multiple_defendants', False)
+    multiple_propounding_parties = data.get('multiple_propounding_parties') if 'multiple_propounding_parties' in data else case_info.get('multiple_propounding_parties', False)
+    multiple_responding_parties = data.get('multiple_responding_parties') if 'multiple_responding_parties' in data else case_info.get('multiple_responding_parties', False)
 
     # These may not be in case_info, so just use request data or defaults
     client_name = data.get('client_name') or header_plaintiffs
     requesting_party = data.get('requesting_party') or propounding_party
 
     try:
+        # Generate default document title if not provided
+        if not document_title:
+            document_title = f"{responding_party.upper()}'S RESPONSES TO {propounding_party.upper()}'S {set_number} SET OF REQUESTS FOR PRODUCTION OF DOCUMENTS"
+
         # Generate document
         file_path = document_generator.generate_response(
             session=session,
@@ -60,12 +69,24 @@ def generate_response(session_id):
             requesting_party=requesting_party,
             propounding_party=propounding_party,
             responding_party=responding_party,
-            set_number=set_number
+            set_number=set_number,
+            document_title=document_title,
+            multiple_plaintiffs=multiple_plaintiffs,
+            multiple_defendants=multiple_defendants,
+            multiple_propounding_parties=multiple_propounding_parties,
+            multiple_responding_parties=multiple_responding_parties
         )
 
-        # Generate download filename
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        download_name = f"rfp_response_{timestamp}.docx"
+        # Generate download filename: yyyy.mm.dd FILENAME.docx
+        date_prefix = datetime.now().strftime('%Y.%m.%d')
+        # Get AI-generated filename from case_info, or generate a default
+        base_filename = case_info.get('filename', '')
+        if not base_filename:
+            # Fallback: generate from responding/propounding party
+            base_filename = f"{responding_party.upper()} RESPONSES TO {propounding_party.upper()} RFP SET {set_number}"
+        # Sanitize filename (remove invalid characters)
+        safe_filename = "".join(c for c in base_filename if c.isalnum() or c in " '-").strip()
+        download_name = f"{date_prefix} {safe_filename}.docx"
 
         # Send file
         response = send_file(

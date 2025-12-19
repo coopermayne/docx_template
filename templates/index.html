@@ -601,13 +601,13 @@
                     this.error = null;
 
                     try {
-                        const blob = await API.generateResponse(this.session.id);
+                        const { blob, filename } = await API.generateResponse(this.session.id);
 
                         // Download the file
                         const url = window.URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = `rfp_response_${new Date().toISOString().slice(0, 10)}.docx`;
+                        a.download = filename;
                         document.body.appendChild(a);
                         a.click();
                         document.body.removeChild(a);

@@ -148,7 +148,18 @@ const API = {
             throw new Error(data.error || 'Generation failed');
         }
 
-        // Return blob for download
-        return response.blob();
+        // Extract filename from Content-Disposition header
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'rfp_response.docx';
+        if (contentDisposition) {
+            const match = contentDisposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i);
+            if (match) {
+                filename = decodeURIComponent(match[1]);
+            }
+        }
+
+        // Return blob and filename for download
+        const blob = await response.blob();
+        return { blob, filename };
     }
 };
