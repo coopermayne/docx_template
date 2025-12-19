@@ -16,6 +16,75 @@ except ImportError:
 class ClaudeService:
     """Service for Claude API interactions."""
 
+    # Tool definitions for structured outputs
+    ANALYSIS_TOOL = {
+        "name": "submit_analysis",
+        "description": "Submit the analysis of RFP requests with suggested objections and documents",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "analyses": {
+                    "type": "object",
+                    "description": "Analysis results keyed by request number",
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                            "objections": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of objection IDs that apply"
+                            },
+                            "documents": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of document IDs that are responsive"
+                            },
+                            "notes": {
+                                "type": "string",
+                                "description": "Brief analysis notes"
+                            }
+                        },
+                        "required": ["objections", "documents", "notes"]
+                    }
+                }
+            },
+            "required": ["analyses"]
+        }
+    }
+
+    COMPOSE_RESPONSE_TOOL = {
+        "name": "submit_response",
+        "description": "Submit the composed response to a discovery request",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "response_text": {
+                    "type": "string",
+                    "description": "The complete response text as it should appear in the legal document"
+                },
+                "objection_arguments": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "description": "The objection ID"
+                            },
+                            "specific_argument": {
+                                "type": "string",
+                                "description": "The specific argument for why this objection applies"
+                            }
+                        },
+                        "required": ["id", "specific_argument"]
+                    },
+                    "description": "List of objection-specific arguments"
+                }
+            },
+            "required": ["response_text", "objection_arguments"]
+        }
+    }
+
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or Config.ANTHROPIC_API_KEY
         self.model = Config.CLAUDE_MODEL
@@ -56,12 +125,20 @@ class ClaudeService:
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=4096,
+                tools=[self.ANALYSIS_TOOL],
+                tool_choice={"type": "tool", "name": "submit_analysis"},
                 messages=[
                     {"role": "user", "content": prompt}
                 ]
             )
 
-            return self._parse_analysis_response(response.content[0].text)
+            # Extract the tool use response
+            for block in response.content:
+                if block.type == "tool_use" and block.name == "submit_analysis":
+                    return block.input.get("analyses", {})
+
+            # Fallback if no tool use found
+            return self._fallback_analysis(requests, documents, objections)
 
         except Exception as e:
             print(f"Claude API error: {e}")
@@ -115,22 +192,9 @@ For each request, analyze and provide:
 2. **Documents**: Which documents (if any) appear potentially responsive based on their filenames, Bates numbers, and descriptions.
 3. **Notes**: Brief analysis (1-2 sentences) explaining your reasoning or flagging any issues.
 
-## Response Format
-Respond ONLY with valid JSON in this exact format:
-{{
-    "1": {{
-        "objections": ["objection_id_1", "objection_id_2"],
-        "documents": ["doc_id_1", "doc_id_2"],
-        "notes": "Brief analysis..."
-    }},
-    "2": {{
-        "objections": [],
-        "documents": [],
-        "notes": "This request appears straightforward..."
-    }}
-}}
+Use the request NUMBER (e.g., "1", "2") as the key. Only include objection IDs and document IDs from the lists provided above.
 
-Use the request NUMBER (e.g., "1", "2") as the key, not the id. Only include objection IDs and document IDs from the lists provided above.
+Call the submit_analysis tool with your analysis results.
 """
         return prompt
 
@@ -312,32 +376,33 @@ Draft a 2-3 sentence argument supporting this objection specific to this request
 4. If no documents, state that no responsive documents exist or will be withheld based on objections
 5. Make sure the response reads as one cohesive piece, not disjointed paragraphs
 
-## Response Format:
-Respond with JSON in this exact format:
-{{
-    "response_text": "The complete response paragraph(s) as they should appear in the document...",
-    "objection_arguments": [
-        {{"id": "objection_id", "specific_argument": "The specific argument for why this objection applies to this request..."}}
-    ]
-}}
-
 The response_text should be the full, polished response ready to be inserted into a legal document. The objection_arguments array captures the specific reasoning for each objection for reference.
+
+Call the submit_response tool with your composed response.
 """
 
         try:
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=2000,
+                tools=[self.COMPOSE_RESPONSE_TOOL],
+                tool_choice={"type": "tool", "name": "submit_response"},
                 messages=[
                     {"role": "user", "content": prompt}
                 ]
             )
 
-            return self._parse_compose_response(
-                response.content[0].text,
-                objections,
-                documents,
-                responding_party
+            # Extract the tool use response
+            for block in response.content:
+                if block.type == "tool_use" and block.name == "submit_response":
+                    return {
+                        "response_text": block.input.get("response_text", ""),
+                        "objection_arguments": block.input.get("objection_arguments", [])
+                    }
+
+            # Fallback if no tool use found
+            return self._fallback_compose_response(
+                request_text, objections, documents, responding_party
             )
 
         except Exception as e:

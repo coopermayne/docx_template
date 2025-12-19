@@ -13,6 +13,12 @@ def generate_response(session_id):
     Generate the RFP response Word document.
 
     Optional JSON body:
+    - court_name: Name of the court
+    - header_plaintiffs: Plaintiffs for case caption
+    - header_defendants: Defendants for case caption
+    - case_no: Case number
+    - client_name: Name of the client/plaintiff
+    - requesting_party: Name of the party requesting production
     - propounding_party: Name of propounding party
     - responding_party: Name of responding party
     - set_number: Set number (e.g., "ONE", "TWO")
@@ -26,6 +32,12 @@ def generate_response(session_id):
 
     # Get optional parameters (silent=True prevents 415 error when no JSON body)
     data = request.get_json(silent=True) or {}
+    court_name = data.get('court_name', 'Superior Court of California')
+    header_plaintiffs = data.get('header_plaintiffs', 'PLAINTIFF')
+    header_defendants = data.get('header_defendants', 'DEFENDANT')
+    case_no = data.get('case_no', '')
+    client_name = data.get('client_name', 'Plaintiff')
+    requesting_party = data.get('requesting_party', 'Defendant')
     propounding_party = data.get('propounding_party', 'Propounding Party')
     responding_party = data.get('responding_party', 'Responding Party')
     set_number = data.get('set_number', 'ONE')
@@ -34,6 +46,12 @@ def generate_response(session_id):
         # Generate document
         file_path = document_generator.generate_response(
             session=session,
+            court_name=court_name,
+            header_plaintiffs=header_plaintiffs,
+            header_defendants=header_defendants,
+            case_no=case_no,
+            client_name=client_name,
+            requesting_party=requesting_party,
             propounding_party=propounding_party,
             responding_party=responding_party,
             set_number=set_number

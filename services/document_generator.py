@@ -17,6 +17,12 @@ class DocumentGenerator:
     def generate_response(
         self,
         session: Session,
+        court_name: str = "Superior Court of California",
+        header_plaintiffs: str = "PLAINTIFF",
+        header_defendants: str = "DEFENDANT",
+        case_no: str = "",
+        client_name: str = "Plaintiff",
+        requesting_party: str = "Defendant",
         propounding_party: str = "Propounding Party",
         responding_party: str = "Responding Party",
         set_number: str = "ONE"
@@ -26,6 +32,12 @@ class DocumentGenerator:
 
         Args:
             session: The session containing requests and documents
+            court_name: Name of the court
+            header_plaintiffs: Plaintiffs for the case caption
+            header_defendants: Defendants for the case caption
+            case_no: Case number
+            client_name: Name of the client/plaintiff
+            requesting_party: Name of the party requesting production
             propounding_party: Name of the propounding party
             responding_party: Name of the responding party
             set_number: The set number (e.g., "ONE", "TWO")
@@ -45,6 +57,12 @@ class DocumentGenerator:
 
         # Build context for template
         context = {
+            'court_name': court_name,
+            'header_plaintiffs': header_plaintiffs,
+            'header_defendants': header_defendants,
+            'case_no': case_no,
+            'client_name': client_name,
+            'requesting_party': requesting_party,
             'propounding_party': propounding_party,
             'responding_party': responding_party,
             'set_number': set_number,
@@ -77,25 +95,32 @@ class DocumentGenerator:
                         'description': doc.description
                     })
 
-            # Build request data with objections and documents
+            # Build the response text from objections and documents
+            response_text = self._build_response_text(
+                selected_objections,
+                selected_documents,
+                responding_party
+            )
+
+            # Build request data for template
             request_data = {
                 'number': req.number,
+                'question': req.text,
+                'response': response_text,
+                # Keep these for backwards compatibility
                 'text': req.text,
-                'objections': [],
+                'objections': [{'id': obj['id'], 'name': obj['name'], 'formal_language': obj['formal_language']} for obj in selected_objections],
                 'documents': selected_documents
             }
 
-            for obj in selected_objections:
-                request_data['objections'].append({
-                    'id': obj['id'],
-                    'name': obj['name'],
-                    'formal_language': obj['formal_language']
-                })
-
             context['requests'].append(request_data)
 
-        # Check if we have a custom template
-        template_path = os.path.join(self.template_dir, 'rfp_response.docx')
+        # Check for the firm template first, then fallback to default
+        template_path = os.path.join(self.template_dir, 'rfp_template.docx')
+
+        if not os.path.exists(template_path):
+            # Fallback to generic template name
+            template_path = os.path.join(self.template_dir, 'rfp_response.docx')
 
         if os.path.exists(template_path):
             doc = DocxTemplate(template_path)
@@ -110,6 +135,64 @@ class DocumentGenerator:
         temp_file.close()
 
         return temp_file.name
+
+    def _build_response_text(
+        self,
+        objections: List[Dict],
+        documents: List[Dict],
+        responding_party: str
+    ) -> str:
+        """
+        Build the response text from objections and documents.
+
+        Args:
+            objections: List of selected objection dictionaries
+            documents: List of selected document dictionaries
+            responding_party: Name of the responding party
+
+        Returns:
+            Formatted response text
+        """
+        parts = []
+
+        # Add objections (replace placeholder with actual party name)
+        if objections:
+            objection_texts = []
+            for obj in objections:
+                text = obj['formal_language'].replace('Responding Party', responding_party)
+                objection_texts.append(text)
+            parts.append(" ".join(objection_texts))
+
+        # Add document production statement
+        if documents:
+            doc_parts = []
+            for doc in documents:
+                bates_str = ""
+                if doc.get('bates_start'):
+                    bates_str = f" ({doc['bates_start']}"
+                    if doc.get('bates_end'):
+                        bates_str += f"-{doc['bates_end']}"
+                    bates_str += ")"
+                doc_parts.append(f"{doc['filename']}{bates_str}")
+
+            # Join documents with commas and "and" for last item
+            if len(doc_parts) == 1:
+                docs_text = doc_parts[0]
+            elif len(doc_parts) == 2:
+                docs_text = f"{doc_parts[0]} and {doc_parts[1]}"
+            else:
+                docs_text = ", ".join(doc_parts[:-1]) + f", and {doc_parts[-1]}"
+
+            if objections:
+                parts.append(f"Subject to and without waiving the foregoing objections, {responding_party} will produce the following documents responsive to this Request: {docs_text}.")
+            else:
+                parts.append(f"{responding_party} will produce the following documents responsive to this Request: {docs_text}.")
+
+        # If no objections and no documents
+        if not objections and not documents:
+            parts.append(f"{responding_party} responds that there are no documents responsive to this Request.")
+
+        return " ".join(parts)
 
     def _generate_without_template(self, context: Dict[str, Any]) -> str:
         """Generate document programmatically without a template."""
