@@ -30,7 +30,8 @@ class DocumentGenerator:
         multiple_plaintiffs: bool = False,
         multiple_defendants: bool = False,
         multiple_propounding_parties: bool = False,
-        multiple_responding_parties: bool = False
+        multiple_responding_parties: bool = False,
+        include_reasoning: bool = False
     ) -> str:
         """
         Generate an RFP response document.
@@ -51,6 +52,7 @@ class DocumentGenerator:
             multiple_defendants: True if multiple defendants in case caption
             multiple_propounding_parties: True if RFP propounded by multiple defendants
             multiple_responding_parties: True if RFP addressed to multiple plaintiffs
+            include_reasoning: If True, include AI-generated arguments after each objection
 
         Returns:
             Path to the generated document
@@ -134,7 +136,8 @@ class DocumentGenerator:
             response_text = self._build_response_text(
                 selected_objections,
                 selected_documents,
-                responding_party
+                responding_party,
+                objection_arguments=req.objection_arguments if include_reasoning else None
             )
 
             # Build request data for template
@@ -175,7 +178,8 @@ class DocumentGenerator:
         self,
         objections: List[Dict],
         documents: List[Dict],
-        responding_party: str
+        responding_party: str,
+        objection_arguments: Optional[Dict[str, str]] = None
     ) -> str:
         """
         Build the response text from objections and documents.
@@ -184,17 +188,23 @@ class DocumentGenerator:
             objections: List of selected objection dictionaries
             documents: List of selected document dictionaries
             responding_party: Name of the responding party
+            objection_arguments: Optional dict of objection_id -> persuasive argument text
 
         Returns:
             Formatted response text
         """
         parts = []
 
-        # Add objections (replace placeholder with actual party name)
+        # Add objections (keep "Responding Party" as-is in formal language)
         if objections:
             objection_texts = []
             for obj in objections:
-                text = obj['formal_language'].replace('Responding Party', responding_party)
+                text = obj['formal_language']
+                # Append persuasive argument if available
+                if objection_arguments and obj['id'] in objection_arguments:
+                    argument = objection_arguments[obj['id']]
+                    if argument:
+                        text = f"{text} {argument}"
                 objection_texts.append(text)
             parts.append(" ".join(objection_texts))
 

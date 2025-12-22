@@ -34,6 +34,16 @@ class ClaudeService:
                                 "items": {"type": "string"},
                                 "description": "List of objection IDs that apply"
                             },
+                            "objection_reasoning": {
+                                "type": "object",
+                                "description": "One-sentence reasoning for each objection (keyed by objection ID), explaining why it applies or doesn't apply",
+                                "additionalProperties": {"type": "string"}
+                            },
+                            "objection_arguments": {
+                                "type": "object",
+                                "description": "One-sentence persuasive legal argument for each objection (keyed by objection ID), written to be included in the response document. Generate for ALL objections, even if not selected.",
+                                "additionalProperties": {"type": "string"}
+                            },
                             "documents": {
                                 "type": "array",
                                 "items": {"type": "string"},
@@ -44,7 +54,7 @@ class ClaudeService:
                                 "description": "Brief analysis notes"
                             }
                         },
-                        "required": ["objections", "documents", "notes"]
+                        "required": ["objections", "objection_reasoning", "objection_arguments", "documents", "notes"]
                     }
                 }
             },
@@ -459,8 +469,10 @@ Call the submit_case_info tool with the extracted information.
 ## Instructions
 For each request, analyze and provide:
 1. **Objections**: Which objections (if any) clearly apply. Be conservative - only suggest objections that are clearly warranted based on the request's language.
-2. **Documents**: Which documents (if any) appear potentially responsive based on their filenames, Bates numbers, and descriptions.
-3. **Notes**: Brief analysis (1-2 sentences) explaining your reasoning or flagging any issues.
+2. **Objection Reasoning**: For EVERY available objection (whether selected or not), provide exactly ONE sentence explaining why it applies or doesn't apply to this specific request. This is for internal reference only. Key by objection ID.
+3. **Objection Arguments**: For EVERY available objection (whether selected or not), write exactly ONE persuasive sentence that could be included in the legal response document to support that objection. Write as if the objection IS being raised - make it specific to this request's language. This will be appended after the formal objection language in the document. Key by objection ID.
+4. **Documents**: Which documents (if any) appear potentially responsive based on their filenames, Bates numbers, and descriptions.
+5. **Notes**: Brief analysis (1-2 sentences) explaining your reasoning or flagging any issues.
 
 Use the request NUMBER (e.g., "1", "2") as the key. Only include objection IDs and document IDs from the lists provided above.
 
@@ -533,8 +545,22 @@ Call the submit_analysis tool with your analysis results.
                             suggested_docs.append(doc.id)
                         break
 
+            # Generate basic reasoning and arguments for each objection
+            objection_reasoning = {}
+            objection_arguments = {}
+            for obj in objections:
+                obj_id = obj['id']
+                if obj_id in suggested_objs:
+                    objection_reasoning[obj_id] = f"Keywords in the request suggest this objection may apply."
+                else:
+                    objection_reasoning[obj_id] = f"No clear indicators that this objection applies."
+                # Use the template argument as fallback
+                objection_arguments[obj_id] = obj.get('argument_template', 'This objection applies to the request as written.')
+
             results[req.number] = {
                 'objections': suggested_objs,
+                'objection_reasoning': objection_reasoning,
+                'objection_arguments': objection_arguments,
                 'documents': suggested_docs,
                 'notes': 'Analysis performed using keyword matching (Claude API not available).'
             }

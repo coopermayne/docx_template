@@ -41,6 +41,8 @@ def analyze_session(session_id):
             if suggestion:
                 req.suggested_objections = suggestion.get('objections', [])
                 req.suggested_documents = suggestion.get('documents', [])
+                req.objection_reasoning = suggestion.get('objection_reasoning', {})
+                req.objection_arguments = suggestion.get('objection_arguments', {})
                 req.ai_notes = suggestion.get('notes', '')
 
                 # Pre-fill selections with suggestions

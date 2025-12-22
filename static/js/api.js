@@ -138,9 +138,13 @@ const API = {
     },
 
     // Generate endpoints
-    async generateResponse(sessionId) {
+    async generateResponse(sessionId, includeReasoning = false) {
         const response = await fetch(`${this.baseUrl}/generate/${sessionId}`, {
-            method: 'POST'
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ include_reasoning: includeReasoning })
         });
 
         if (!response.ok) {

@@ -251,6 +251,7 @@
                                         <template x-for="obj in objections" :key="obj.id">
                                             <label class="checkbox-item"
                                                    :class="{ 'selected': request.selected_objections.includes(obj.id) }"
+                                                   :title="request.objection_reasoning && request.objection_reasoning[obj.id] ? request.objection_reasoning[obj.id] : ''"
                                                    @click="toggleObjection(request, obj.id)">
                                                 <span x-text="obj.short_name"></span>
                                             </label>
@@ -316,11 +317,23 @@
                     </ul>
                 </div>
 
-                <div style="text-align: center; padding: 2rem;">
+                <div style="text-align: center; padding: 2rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
                     <button class="btn btn-success" style="font-size: 1rem; padding: 1rem 2rem;"
-                            @click="generateDocument()" :disabled="generating">
+                            @click="generateDocument(false)" :disabled="generating">
                         <template x-if="!generating">
-                            <span>📄 Generate Word Document</span>
+                            <span>📄 Generate Document</span>
+                        </template>
+                        <template x-if="generating">
+                            <span class="loading" style="padding: 0;">
+                                <span class="spinner"></span>
+                                Generating...
+                            </span>
+                        </template>
+                    </button>
+                    <button class="btn btn-primary" style="font-size: 1rem; padding: 1rem 2rem;"
+                            @click="generateDocument(true)" :disabled="generating">
+                        <template x-if="!generating">
+                            <span>📄 Generate with Reasoning</span>
                         </template>
                         <template x-if="generating">
                             <span class="loading" style="padding: 0;">
@@ -416,7 +429,8 @@
                         this.session.requests = data.requests.map(r => ({
                             ...r,
                             selected_objections: r.suggested_objections || [],
-                            selected_documents: r.suggested_documents || []
+                            selected_documents: r.suggested_documents || [],
+                            objection_reasoning: r.objection_reasoning || {}
                         }));
                     } catch (e) {
                         this.error = e.message;
@@ -487,6 +501,7 @@
                         suggested_documents: [],
                         selected_objections: [],
                         selected_documents: [],
+                        objection_reasoning: {},
                         ai_notes: '',
                         user_notes: '',
                         include_in_response: true
@@ -538,6 +553,7 @@
                                 if (suggestion) {
                                     r.suggested_objections = suggestion.objections || [];
                                     r.suggested_documents = suggestion.documents || [];
+                                    r.objection_reasoning = suggestion.objection_reasoning || {};
                                     r.ai_notes = suggestion.notes || '';
                                     // Pre-fill selections with suggestions
                                     r.selected_objections = [...r.suggested_objections];
@@ -596,12 +612,12 @@
                     }
                 },
 
-                async generateDocument() {
+                async generateDocument(includeReasoning = false) {
                     this.generating = true;
                     this.error = null;
 
                     try {
-                        const { blob, filename } = await API.generateResponse(this.session.id);
+                        const { blob, filename } = await API.generateResponse(this.session.id, includeReasoning);
 
                         // Download the file
                         const url = window.URL.createObjectURL(blob);

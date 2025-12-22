@@ -68,6 +68,8 @@ class RFPRequest:
     # AI suggestions (filled after analysis)
     suggested_objections: List[str] = field(default_factory=list)
     suggested_documents: List[str] = field(default_factory=list)
+    objection_reasoning: Dict[str, str] = field(default_factory=dict)
+    objection_arguments: Dict[str, str] = field(default_factory=dict)
     ai_notes: str = ""
     # User selections (edited from suggestions)
     selected_objections: List[str] = field(default_factory=list)
@@ -83,6 +85,8 @@ class RFPRequest:
             'raw_text': self.raw_text,
             'suggested_objections': self.suggested_objections,
             'suggested_documents': self.suggested_documents,
+            'objection_reasoning': self.objection_reasoning,
+            'objection_arguments': self.objection_arguments,
             'ai_notes': self.ai_notes,
             'selected_objections': self.selected_objections,
             'selected_documents': self.selected_documents,
@@ -92,7 +96,11 @@ class RFPRequest:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'RFPRequest':
-        return cls(**data)
+        # Handle fields which may not exist in old data
+        filtered_data = {k: v for k, v in data.items() if k in ['id', 'number', 'text', 'raw_text',
+            'suggested_objections', 'suggested_documents', 'objection_reasoning', 'objection_arguments',
+            'ai_notes', 'selected_objections', 'selected_documents', 'user_notes', 'include_in_response']}
+        return cls(**filtered_data)
 
 
 @dataclass
