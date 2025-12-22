@@ -132,6 +132,37 @@ const API = {
         return this.request('/objections/presets');
     },
 
+    async getObjections() {
+        return this.request('/objections');
+    },
+
+    async createObjection(objection) {
+        return this.request('/objections', {
+            method: 'POST',
+            body: JSON.stringify(objection)
+        });
+    },
+
+    async updateObjection(objectionId, updates) {
+        return this.request(`/objections/${objectionId}`, {
+            method: 'PUT',
+            body: JSON.stringify(updates)
+        });
+    },
+
+    async deleteObjection(objectionId) {
+        return this.request(`/objections/${objectionId}`, {
+            method: 'DELETE'
+        });
+    },
+
+    async reorderObjections(order) {
+        return this.request('/objections/reorder', {
+            method: 'PUT',
+            body: JSON.stringify({ order })
+        });
+    },
+
     // Analysis endpoints
     async runAnalysis(sessionId) {
         return this.request(`/analyze/${sessionId}`, { method: 'POST' });

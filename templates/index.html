@@ -12,12 +12,22 @@
     <div x-data="app()" x-init="init()">
         <!-- Header -->
         <header>
-            <div class="container">
-                <h1>Legal RFP Response Tool</h1>
+            <div class="container" style="display: flex; justify-content: space-between; align-items: center;">
+                <h1 style="margin: 0;">Legal RFP Response Tool</h1>
+                <nav class="header-nav">
+                    <button class="nav-btn" :class="{ 'active': currentPage === 'rfp' }" @click="switchPage('rfp')">
+                        RFP Tool
+                    </button>
+                    <button class="nav-btn" :class="{ 'active': currentPage === 'objections' }" @click="switchPage('objections')">
+                        Manage Objections
+                    </button>
+                </nav>
             </div>
         </header>
 
         <main class="container">
+            <!-- RFP Tool Page -->
+            <div x-show="currentPage === 'rfp'">
             <!-- Steps Indicator -->
             <ul class="steps">
                 <li class="step"
@@ -349,12 +359,127 @@
                     <button class="btn btn-secondary" @click="startOver()">Start New Session</button>
                 </div>
             </div>
+            </div><!-- End RFP Tool Page -->
+
+            <!-- Manage Objections Page -->
+            <div x-show="currentPage === 'objections'">
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <h2 class="card-title" style="margin: 0;">Manage Objections</h2>
+                        <button class="btn btn-primary" @click="showAddObjection = true">+ Add Objection</button>
+                    </div>
+
+                    <p style="color: var(--gray-600); margin-bottom: 1.5rem;">
+                        Configure the objections available when responding to RFP requests. Changes apply to all future sessions.
+                    </p>
+
+                    <!-- Error Alert -->
+                    <div x-show="objectionError" class="alert alert-error" x-text="objectionError"></div>
+
+                    <!-- Objections List -->
+                    <div class="objections-list">
+                        <template x-for="(obj, index) in managedObjections" :key="obj.id">
+                            <div class="objection-item">
+                                <div class="objection-item-header">
+                                    <div class="objection-item-title">
+                                        <span class="objection-badge" x-text="obj.short_name"></span>
+                                        <strong x-text="obj.name"></strong>
+                                    </div>
+                                    <div class="objection-item-actions">
+                                        <button class="btn btn-sm btn-secondary" @click="editObjection(obj)">Edit</button>
+                                    </div>
+                                </div>
+                                <div class="objection-item-body">
+                                    <div class="objection-field">
+                                        <label>Formal Language:</label>
+                                        <p x-text="obj.formal_language"></p>
+                                    </div>
+                                    <div class="objection-field" x-show="obj.argument_template">
+                                        <label>Argument Template:</label>
+                                        <p x-text="obj.argument_template"></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div x-show="managedObjections.length === 0" style="text-align: center; padding: 2rem; color: var(--gray-500);">
+                        No objections configured. Click "Add Objection" to create one.
+                    </div>
+                </div>
+            </div><!-- End Manage Objections Page -->
+
+            <!-- Add/Edit Objection Modal -->
+            <div x-show="showAddObjection || editingObjection" class="modal-overlay" @click.self="closeObjectionModal()">
+                <div class="modal">
+                    <div class="modal-header">
+                        <h3 x-text="editingObjection ? 'Edit Objection' : 'Add New Objection'"></h3>
+                        <button class="btn-icon" @click="closeObjectionModal()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>Name</label>
+                            <input type="text" x-model="objectionForm.name"
+                                   placeholder="e.g., Vague and Ambiguous"
+                                   class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>Short Name (for UI display)</label>
+                            <input type="text" x-model="objectionForm.short_name"
+                                   placeholder="e.g., Vague"
+                                   class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>Formal Language</label>
+                            <textarea x-model="objectionForm.formal_language" rows="3"
+                                      placeholder="The formal objection text used in the response document..."
+                                      class="form-input"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Argument Template (optional)</label>
+                            <textarea x-model="objectionForm.argument_template" rows="3"
+                                      placeholder="A template argument supporting this objection..."
+                                      class="form-input"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button x-show="editingObjection" class="btn btn-danger" style="margin-right: auto;" @click="confirmDeleteObjection(editingObjection)">Delete</button>
+                        <button class="btn btn-secondary" @click="closeObjectionModal()">Cancel</button>
+                        <button class="btn btn-primary" @click="saveObjection()" :disabled="savingObjection">
+                            <span x-show="!savingObjection" x-text="editingObjection ? 'Save Changes' : 'Add Objection'"></span>
+                            <span x-show="savingObjection" class="loading"><span class="spinner"></span> Saving...</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Delete Confirmation Modal -->
+            <div x-show="deletingObjection" class="modal-overlay" @click.self="deletingObjection = null">
+                <div class="modal" style="max-width: 400px;">
+                    <div class="modal-header">
+                        <h3>Delete Objection</h3>
+                        <button class="btn-icon" @click="deletingObjection = null">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Are you sure you want to delete "<strong x-text="deletingObjection?.name"></strong>"?</p>
+                        <p style="color: var(--gray-600); font-size: 0.875rem; margin-top: 0.5rem;">This action cannot be undone.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" @click="deletingObjection = null">Cancel</button>
+                        <button class="btn btn-danger" @click="deleteObjection()">Delete</button>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
 
     <script>
         function app() {
             return {
+                // Page navigation
+                currentPage: 'rfp',
+
+                // RFP Tool state
                 currentStep: 1,
                 isDragging: false,
                 uploading: false,
@@ -370,6 +495,20 @@
                 },
 
                 objections: [],
+
+                // Objections Management state
+                managedObjections: [],
+                objectionError: null,
+                showAddObjection: false,
+                editingObjection: null,
+                deletingObjection: null,
+                savingObjection: false,
+                objectionForm: {
+                    name: '',
+                    short_name: '',
+                    formal_language: '',
+                    argument_template: ''
+                },
 
                 async init() {
                     // Load objection presets
@@ -644,6 +783,127 @@
                     };
                     this.currentStep = 1;
                     this.error = null;
+                },
+
+                // Page navigation
+                async switchPage(page) {
+                    this.currentPage = page;
+                    if (page === 'objections') {
+                        await this.loadManagedObjections();
+                    }
+                },
+
+                // Objections Management methods
+                async loadManagedObjections() {
+                    this.objectionError = null;
+                    try {
+                        const data = await API.getObjections();
+                        this.managedObjections = data.objections || [];
+                    } catch (e) {
+                        this.objectionError = e.message;
+                    }
+                },
+
+                editObjection(obj) {
+                    this.editingObjection = obj;
+                    this.objectionForm = {
+                        name: obj.name,
+                        short_name: obj.short_name,
+                        formal_language: obj.formal_language,
+                        argument_template: obj.argument_template || ''
+                    };
+                },
+
+                confirmDeleteObjection(obj) {
+                    this.deletingObjection = obj;
+                },
+
+                closeObjectionModal() {
+                    this.showAddObjection = false;
+                    this.editingObjection = null;
+                    this.objectionForm = {
+                        name: '',
+                        short_name: '',
+                        formal_language: '',
+                        argument_template: ''
+                    };
+                },
+
+                // Generate a unique ID from short_name
+                generateUniqueId(shortName) {
+                    // Slugify: lowercase, replace spaces with underscores, remove special chars
+                    let baseId = shortName
+                        .toLowerCase()
+                        .replace(/\s+/g, '_')
+                        .replace(/[^a-z0-9_]/g, '');
+
+                    // Check for duplicates
+                    const existingIds = this.managedObjections.map(o => o.id);
+                    let uniqueId = baseId;
+                    let counter = 1;
+
+                    while (existingIds.includes(uniqueId)) {
+                        uniqueId = `${baseId}_${counter}`;
+                        counter++;
+                    }
+
+                    return uniqueId;
+                },
+
+                async saveObjection() {
+                    this.objectionError = null;
+                    this.savingObjection = true;
+
+                    try {
+                        if (this.editingObjection) {
+                            // Update existing
+                            await API.updateObjection(this.editingObjection.id, {
+                                name: this.objectionForm.name,
+                                short_name: this.objectionForm.short_name,
+                                formal_language: this.objectionForm.formal_language,
+                                argument_template: this.objectionForm.argument_template
+                            });
+                        } else {
+                            // Create new - generate ID from short_name
+                            const newId = this.generateUniqueId(this.objectionForm.short_name);
+                            await API.createObjection({
+                                id: newId,
+                                name: this.objectionForm.name,
+                                short_name: this.objectionForm.short_name,
+                                formal_language: this.objectionForm.formal_language,
+                                argument_template: this.objectionForm.argument_template
+                            });
+                        }
+
+                        await this.loadManagedObjections();
+                        // Also refresh the objections used in RFP tool
+                        const data = await API.getObjectionPresets();
+                        this.objections = data.objections || [];
+
+                        this.closeObjectionModal();
+                    } catch (e) {
+                        this.objectionError = e.message;
+                    } finally {
+                        this.savingObjection = false;
+                    }
+                },
+
+                async deleteObjection() {
+                    if (!this.deletingObjection) return;
+
+                    this.objectionError = null;
+
+                    try {
+                        await API.deleteObjection(this.deletingObjection.id);
+                        await this.loadManagedObjections();
+                        // Also refresh the objections used in RFP tool
+                        const data = await API.getObjectionPresets();
+                        this.objections = data.objections || [];
+
+                        this.deletingObjection = null;
+                    } catch (e) {
+                        this.objectionError = e.message;
+                    }
                 }
             };
         }
