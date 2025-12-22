@@ -1,5 +1,6 @@
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional
 from models import RFPRequest, Document, Objection
 from config import Config
@@ -92,6 +93,35 @@ class ClaudeService:
                 }
             },
             "required": ["response_text", "objection_arguments"]
+        }
+    }
+
+    EXTRACT_REQUESTS_TOOL = {
+        "name": "submit_requests",
+        "description": "Submit the extracted requests from an RFP document. Each request must preserve the EXACT original text with no modifications.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "requests": {
+                    "type": "array",
+                    "description": "Array of extracted requests in order",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "number": {
+                                "type": "string",
+                                "description": "The request number exactly as it appears (e.g., '1', '2', '10')"
+                            },
+                            "text": {
+                                "type": "string",
+                                "description": "The EXACT, VERBATIM text of the request. Do NOT fix typos, grammar, or formatting. Copy character-for-character."
+                            }
+                        },
+                        "required": ["number", "text"]
+                    }
+                }
+            },
+            "required": ["requests"]
         }
     }
 
@@ -377,6 +407,77 @@ Call the submit_case_info tool with the extracted information.
 
         return result
 
+    def extract_requests(self, full_text: str) -> List[Dict[str, str]]:
+        """
+        Extract individual requests from RFP document text using Claude.
+
+        CRITICAL: This method preserves the EXACT verbatim text of each request.
+        No corrections, no grammar fixes, no reformatting.
+
+        Args:
+            full_text: The complete text extracted from the RFP PDF
+
+        Returns:
+            List of dicts with 'number' and 'text' keys, or empty list if extraction fails
+        """
+        if not self.is_available():
+            return []
+
+        prompt = f"""You are extracting individual Requests for Production from a legal discovery document.
+
+## CRITICAL INSTRUCTIONS - READ CAREFULLY:
+
+1. **VERBATIM EXTRACTION**: Copy each request's text EXACTLY as it appears. Do NOT:
+   - Fix spelling errors
+   - Fix grammatical errors
+   - Fix punctuation
+   - Change capitalization
+   - Reformat or restructure sentences
+   - Add or remove any words
+   - "Clean up" the text in any way
+
+2. **What to extract**: Each numbered request asking for documents (e.g., "REQUEST NO. 1:", "REQUEST FOR PRODUCTION NO. 1:", "DEMAND NO. 1:", "1.", etc.)
+
+3. **What NOT to include in the request text**:
+   - The "REQUEST NO. X:" header itself (just extract the number)
+   - Definitions sections
+   - Instructions sections
+   - Signature blocks
+   - Page headers/footers
+
+4. **Request boundaries**: A request ends when the next numbered request begins, or when you hit definitions/instructions/signature sections.
+
+5. **Preserve everything else**: If a request has weird spacing, typos like "docuemnts" instead of "documents", or grammatical errors like "all document relating to" - keep them EXACTLY as written.
+
+## Document Text:
+{full_text}
+
+## Output:
+Extract each request with its number and exact verbatim text. Call the submit_requests tool.
+"""
+
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=8000,
+                tools=[self.EXTRACT_REQUESTS_TOOL],
+                tool_choice={"type": "tool", "name": "submit_requests"},
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+
+            # Extract the tool use response
+            for block in response.content:
+                if block.type == "tool_use" and block.name == "submit_requests":
+                    return block.input.get("requests", [])
+
+            return []
+
+        except Exception as e:
+            print(f"Claude API error in extract_requests: {e}")
+            return []
+
     def analyze_requests(
         self,
         requests: List[RFPRequest],
@@ -385,6 +486,9 @@ Call the submit_case_info tool with the extracted information.
     ) -> Dict[str, Dict[str, Any]]:
         """
         Analyze RFP requests and suggest objections and responsive documents.
+
+        For large RFPs, requests are processed in parallel chunks controlled by
+        Config.ANALYSIS_CHUNK_SIZE (default: 10 requests per chunk).
 
         Returns:
             {
@@ -396,15 +500,85 @@ Call the submit_case_info tool with the extracted information.
             }
         """
         if not self.is_available():
-            # Return empty suggestions if Claude not available
             return self._fallback_analysis(requests, documents, objections)
+
+        chunk_size = Config.ANALYSIS_CHUNK_SIZE
+
+        # If small enough, process in single call
+        if len(requests) <= chunk_size:
+            return self._analyze_chunk(requests, documents, objections)
+
+        # Split into chunks and process in parallel
+        chunks = [
+            requests[i:i + chunk_size]
+            for i in range(0, len(requests), chunk_size)
+        ]
+
+        print(f"Analyzing {len(requests)} requests in {len(chunks)} parallel chunks of ~{chunk_size}")
+        import sys
+        sys.stdout.flush()
+
+        all_results = {}
+
+        # Try sequential first to debug, then switch to parallel
+        use_parallel = True
+
+        if use_parallel:
+            with ThreadPoolExecutor(max_workers=len(chunks)) as executor:
+                # Submit all chunks
+                future_to_chunk = {
+                    executor.submit(self._analyze_chunk, chunk, documents, objections): i
+                    for i, chunk in enumerate(chunks)
+                }
+
+                # Collect results as they complete
+                for future in as_completed(future_to_chunk):
+                    chunk_idx = future_to_chunk[future]
+                    try:
+                        chunk_results = future.result()
+                        print(f"Chunk {chunk_idx} returned {len(chunk_results)} results")
+                        sys.stdout.flush()
+                        all_results.update(chunk_results)
+                    except Exception as e:
+                        print(f"Chunk {chunk_idx} failed: {e}")
+                        sys.stdout.flush()
+                        import traceback
+                        traceback.print_exc()
+                        # Fallback for failed chunk
+                        failed_chunk = chunks[chunk_idx]
+                        fallback = self._fallback_analysis(failed_chunk, documents, objections)
+                        all_results.update(fallback)
+        else:
+            # Sequential for debugging
+            for i, chunk in enumerate(chunks):
+                print(f"Processing chunk {i}...")
+                sys.stdout.flush()
+                chunk_results = self._analyze_chunk(chunk, documents, objections)
+                print(f"Chunk {i} returned {len(chunk_results)} results")
+                sys.stdout.flush()
+                all_results.update(chunk_results)
+
+        print(f"Total results: {len(all_results)}")
+        sys.stdout.flush()
+        return all_results
+
+    def _analyze_chunk(
+        self,
+        requests: List[RFPRequest],
+        documents: List[Document],
+        objections: List[Dict[str, Any]]
+    ) -> Dict[str, Dict[str, Any]]:
+        """Analyze a single chunk of requests."""
+        import sys
+        request_numbers = [r.number for r in requests]
+        print(f"Analyzing chunk with requests: {request_numbers}", flush=True)
 
         prompt = self._build_analysis_prompt(requests, documents, objections)
 
         try:
             response = self.client.messages.create(
                 model=self.model,
-                max_tokens=4096,
+                max_tokens=16000,
                 tools=[self.ANALYSIS_TOOL],
                 tool_choice={"type": "tool", "name": "submit_analysis"},
                 messages=[
@@ -413,15 +587,28 @@ Call the submit_case_info tool with the extracted information.
             )
 
             # Extract the tool use response
+            print(f"Response stop_reason: {response.stop_reason}", flush=True)
+            print(f"Response content types: {[b.type for b in response.content]}", flush=True)
             for block in response.content:
-                if block.type == "tool_use" and block.name == "submit_analysis":
-                    return block.input.get("analyses", {})
+                if block.type == "text":
+                    print(f"Text block: {block.text[:200] if block.text else 'empty'}", flush=True)
+                if block.type == "tool_use":
+                    print(f"Tool name: {block.name}, input keys: {list(block.input.keys())}", flush=True)
+                    if block.name == "submit_analysis":
+                        print(f"Tool input: {str(block.input)[:500]}", flush=True)
+                        result = block.input.get("analyses", {})
+                        print(f"Chunk returned keys: {list(result.keys())}", flush=True)
+                        return result
 
             # Fallback if no tool use found
+            print(f"No tool use found for chunk {request_numbers}, using fallback", flush=True)
             return self._fallback_analysis(requests, documents, objections)
 
         except Exception as e:
-            print(f"Claude API error: {e}")
+            print(f"Claude API error for chunk {request_numbers}: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            sys.stdout.flush()
             return self._fallback_analysis(requests, documents, objections)
 
     def _build_analysis_prompt(

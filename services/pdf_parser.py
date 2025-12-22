@@ -149,14 +149,47 @@ class RFPParserPlumber:
         return parser._extract_requests(full_text)
 
 
-def parse_rfp(pdf_path: str) -> Tuple[List[RFPRequest], str]:
+def parse_rfp(pdf_path: str, use_claude: bool = True) -> Tuple[List[RFPRequest], str]:
     """
     Parse an RFP PDF file and return extracted requests.
+
+    Args:
+        pdf_path: Path to the PDF file
+        use_claude: If True, try Claude extraction first (default True)
 
     Returns:
         Tuple of (requests list, parser used)
     """
-    # Try primary parser first
+    # Extract text from PDF first
+    reader = PdfReader(pdf_path)
+    full_text = ""
+    for page in reader.pages:
+        text = page.extract_text()
+        if text:
+            full_text += text + "\n"
+
+    # Try Claude extraction first (if enabled and available)
+    if use_claude and full_text:
+        try:
+            from services.claude_service import claude_service
+            if claude_service.is_available():
+                claude_requests = claude_service.extract_requests(full_text)
+                if claude_requests and len(claude_requests) >= 1:
+                    # Convert to RFPRequest objects
+                    requests = []
+                    for i, req in enumerate(claude_requests):
+                        requests.append(RFPRequest(
+                            id=i + 1,
+                            number=req.get('number', str(i + 1)),
+                            text=req.get('text', ''),
+                            raw_text=req.get('text', '')  # Same as text for Claude extraction
+                        ))
+                    if requests:
+                        return requests, 'Claude'
+        except Exception as e:
+            print(f"Claude extraction failed, falling back to regex: {e}")
+
+    # Fallback to regex-based parser
     parser = RFPParser()
     requests = parser.parse_pdf(pdf_path)
 

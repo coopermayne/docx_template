@@ -23,3 +23,7 @@ class Config:
 
     # Presets
     PRESETS_FOLDER = os.environ.get('PRESETS_FOLDER', './presets')
+
+    # Claude Analysis Settings
+    # Number of RFP requests to analyze per API call (for chunking large RFPs)
+    ANALYSIS_CHUNK_SIZE = int(os.environ.get('ANALYSIS_CHUNK_SIZE', 10))
