@@ -27,6 +27,8 @@ python -m unittest test_app.py -v
 - `ANTHROPIC_API_KEY` - Required for Claude AI features (analysis, extraction)
 - `CLAUDE_MODEL` - Model name (default: claude-sonnet-4-20250514)
 - `PORT` - Server port (default: 5000, Render uses 10000)
+- `SUPABASE_URL` - Supabase project URL (required for objections)
+- `SUPABASE_ANON_KEY` - Supabase anonymous key (required for objections)
 
 ## Architecture
 
@@ -56,6 +58,7 @@ Services   Models
 - **document_generator.py** - Word generation via docxtpl templates, python-docx fallback
 - **session_store.py** - JSON file persistence in ./data/sessions/
 - **bates_detector.py** - Extract Bates ranges from document filenames
+- **supabase_service.py** - Supabase REST API client for cloud storage
 
 ### API Blueprints (`/api`)
 
@@ -64,7 +67,8 @@ Services   Models
 - documents.py - Responsive document management
 - analyze.py - Trigger Claude analysis
 - generate.py - Generate DOCX response
-- objections.py - Load objection presets from ./presets/
+- objections.py - Objections CRUD (Supabase)
+- users.py - Users CRUD (Supabase)
 
 ## Key Patterns
 
@@ -86,4 +90,8 @@ Primary: docxtpl with Jinja2 templates in ./templates/word/rfp_template.docx
 Fallback: Programmatic python-docx generation
 
 ### Objections System
-JSON presets in ./presets/default_objections.json with formal_language and argument_template fields. Extensible by adding more preset files.
+Stored in Supabase `objections` table. Requires `SUPABASE_URL` and `SUPABASE_ANON_KEY` env vars.
+
+### Users System
+Stored in Supabase `users` table (bar_number, name, email, icon).
+Frontend session stored in localStorage - users select from dropdown, no auth required.

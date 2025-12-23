@@ -196,5 +196,39 @@ const API = {
         // Return blob and filename for download
         const blob = await response.blob();
         return { blob, filename };
+    },
+
+    // Motion Opposition endpoints
+    async uploadMotion(file) {
+        return this.uploadFile('/motion-opposition/upload', file);
+    },
+
+    // Users endpoints
+    async getUsers() {
+        return this.request('/users');
+    },
+
+    async getUser(userId) {
+        return this.request(`/users/${userId}`);
+    },
+
+    async createUser(user) {
+        return this.request('/users', {
+            method: 'POST',
+            body: JSON.stringify(user)
+        });
+    },
+
+    async updateUser(userId, updates) {
+        return this.request(`/users/${userId}`, {
+            method: 'PUT',
+            body: JSON.stringify(updates)
+        });
+    },
+
+    async deleteUser(userId) {
+        return this.request(`/users/${userId}`, {
+            method: 'DELETE'
+        });
     }
 };

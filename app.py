@@ -27,6 +27,8 @@ from api.documents import documents_bp
 from api.objections import objections_bp
 from api.analyze import analyze_bp
 from api.generate import generate_bp
+from api.motion_opposition import motion_opposition_bp
+from api.users import users_bp
 
 app.register_blueprint(session_bp)
 app.register_blueprint(rfp_bp)
@@ -34,6 +36,8 @@ app.register_blueprint(documents_bp)
 app.register_blueprint(objections_bp)
 app.register_blueprint(analyze_bp)
 app.register_blueprint(generate_bp)
+app.register_blueprint(motion_opposition_bp)
+app.register_blueprint(users_bp)
 
 
 @app.route('/')

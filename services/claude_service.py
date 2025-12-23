@@ -188,6 +188,71 @@ class ClaudeService:
         }
     }
 
+    EXTRACT_MOTION_INFO_TOOL = {
+        "name": "submit_motion_info",
+        "description": "Submit the extracted information from a motion document",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "motion_title": {
+                    "type": "string",
+                    "description": "The title of the motion (e.g., 'Motion to Compel Discovery', 'Motion for Summary Judgment')"
+                },
+                "case_number": {
+                    "type": "string",
+                    "description": "Case number (e.g., '2:24-cv-01234-ABC-XYZ', 'BC123456')"
+                },
+                "court_name": {
+                    "type": "string",
+                    "description": "Full name of the court (e.g., 'United States District Court, Central District of California')"
+                },
+                "judge_name": {
+                    "type": "string",
+                    "description": "Name of the presiding judge (e.g., 'Hon. John Smith'). Empty string if not found."
+                },
+                "magistrate_judge_name": {
+                    "type": "string",
+                    "description": "Name of the magistrate judge if any (e.g., 'Hon. Jane Doe'). Empty string if not found."
+                },
+                "hearing_date": {
+                    "type": "string",
+                    "description": "Date of the hearing (e.g., 'January 15, 2025'). Empty string if not specified."
+                },
+                "hearing_time": {
+                    "type": "string",
+                    "description": "Time of the hearing (e.g., '9:00 a.m.', '2:30 p.m.'). Empty string if not specified."
+                },
+                "hearing_location": {
+                    "type": "string",
+                    "description": "Location/courtroom for the hearing (e.g., 'Courtroom 5A, 255 E Temple St, Los Angeles, CA'). Empty string if not specified."
+                },
+                "plaintiffs": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of plaintiff names from the case caption"
+                },
+                "defendants": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of defendant names from the case caption"
+                },
+                "multiple_plaintiffs": {
+                    "type": "boolean",
+                    "description": "True if there are multiple plaintiffs"
+                },
+                "multiple_defendants": {
+                    "type": "boolean",
+                    "description": "True if there are multiple defendants"
+                },
+                "moving_party": {
+                    "type": "string",
+                    "description": "The party who filed/authored this motion (e.g., 'Defendant Acme Corp', 'Plaintiff John Smith')"
+                }
+            },
+            "required": ["motion_title", "case_number", "court_name", "judge_name", "magistrate_judge_name", "hearing_date", "hearing_time", "hearing_location", "plaintiffs", "defendants", "multiple_plaintiffs", "multiple_defendants", "moving_party"]
+        }
+    }
+
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or Config.ANTHROPIC_API_KEY
         self.model = Config.CLAUDE_MODEL
@@ -404,6 +469,165 @@ Call the submit_case_info tool with the extracted information.
         # Generate document title and filename from extracted info
         result["document_title"] = f"{result['responding_party'].upper()}'S RESPONSES TO {result['propounding_party'].upper()}'S {set_ordinal} SET OF REQUESTS FOR PRODUCTION OF DOCUMENTS"
         result["filename"] = f"{result['responding_party'].upper()} RESPONSES TO {result['propounding_party'].upper()} RFP SET {result['set_number']}"
+
+        return result
+
+    def extract_motion_info(self, two_page_text: str) -> Dict[str, Any]:
+        """
+        Extract information from the first two pages of a motion document.
+
+        Args:
+            two_page_text: Text content from the first two pages of the motion
+
+        Returns:
+            Dictionary with extracted motion information
+        """
+        if not self.is_available():
+            return self._fallback_extract_motion_info(two_page_text)
+
+        prompt = f"""You are a legal assistant extracting information from a motion document filed in court.
+
+## Document Text (first two pages):
+{two_page_text}
+
+## Instructions:
+Extract the following information from the motion document:
+
+1. **motion_title**: The title/name of the motion (e.g., "Motion to Compel Discovery", "Motion for Summary Judgment", "Motion to Dismiss")
+
+2. **case_number**: The case number exactly as it appears (e.g., "2:24-cv-01234-ABC-XYZ", "BC123456")
+
+3. **court_name**: The full name of the court (e.g., "United States District Court, Central District of California")
+
+4. **judge_name**: The presiding judge's name if listed (e.g., "Hon. John Smith"). Use empty string if not found.
+
+5. **magistrate_judge_name**: The magistrate judge's name if listed (e.g., "Hon. Jane Doe"). Use empty string if not found.
+
+6. **hearing_date**: The scheduled hearing date (e.g., "January 15, 2025"). Use empty string if not specified.
+
+7. **hearing_time**: The scheduled hearing time (e.g., "9:00 a.m."). Use empty string if not specified.
+
+8. **hearing_location**: The courtroom/location for the hearing (e.g., "Courtroom 5A, 255 E Temple St, Los Angeles, CA"). Use empty string if not specified.
+
+9. **plaintiffs**: Extract ALL plaintiff names from the case caption as an array. Include "et al." parties if mentioned.
+
+10. **defendants**: Extract ALL defendant names from the case caption as an array. Include "et al." parties if mentioned.
+
+11. **multiple_plaintiffs**: True if there is more than one plaintiff, false otherwise.
+
+12. **multiple_defendants**: True if there is more than one defendant, false otherwise.
+
+13. **moving_party**: The party who filed/authored this motion. Look at who signed the motion or whose counsel prepared it. Format as "Defendant [Name]" or "Plaintiff [Name]" (e.g., "Defendant Acme Corp", "Plaintiffs John and Jane Doe").
+
+If any field cannot be determined from the document, provide your best guess or use an empty string/empty array/false as appropriate.
+
+Call the submit_motion_info tool with the extracted information.
+"""
+
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=1500,
+                tools=[self.EXTRACT_MOTION_INFO_TOOL],
+                tool_choice={"type": "tool", "name": "submit_motion_info"},
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+
+            # Extract the tool use response
+            for block in response.content:
+                if block.type == "tool_use" and block.name == "submit_motion_info":
+                    result = block.input
+                    # Ensure all expected keys exist with defaults
+                    return {
+                        "motion_title": result.get("motion_title", ""),
+                        "case_number": result.get("case_number", ""),
+                        "court_name": result.get("court_name", ""),
+                        "judge_name": result.get("judge_name", ""),
+                        "magistrate_judge_name": result.get("magistrate_judge_name", ""),
+                        "hearing_date": result.get("hearing_date", ""),
+                        "hearing_time": result.get("hearing_time", ""),
+                        "hearing_location": result.get("hearing_location", ""),
+                        "plaintiffs": result.get("plaintiffs", []),
+                        "defendants": result.get("defendants", []),
+                        "multiple_plaintiffs": result.get("multiple_plaintiffs", False),
+                        "multiple_defendants": result.get("multiple_defendants", False),
+                        "moving_party": result.get("moving_party", "")
+                    }
+
+            # Fallback if no tool use found
+            return self._fallback_extract_motion_info(two_page_text)
+
+        except Exception as e:
+            print(f"Claude API error in extract_motion_info: {e}")
+            return self._fallback_extract_motion_info(two_page_text)
+
+    def _fallback_extract_motion_info(self, text: str) -> Dict[str, Any]:
+        """Fallback extraction for motion info when Claude is unavailable."""
+        import re
+
+        result = {
+            "motion_title": "",
+            "case_number": "",
+            "court_name": "",
+            "judge_name": "",
+            "magistrate_judge_name": "",
+            "hearing_date": "",
+            "hearing_time": "",
+            "hearing_location": "",
+            "plaintiffs": [],
+            "defendants": [],
+            "multiple_plaintiffs": False,
+            "multiple_defendants": False,
+            "moving_party": ""
+        }
+
+        text_upper = text.upper()
+
+        # Try to extract case number
+        case_no_patterns = [
+            r'CASE\s*(?:NO\.?|NUMBER|#)[:\s]*([A-Z0-9\-:]+)',
+            r'(?:NO\.?|NUMBER|#)[:\s]*([A-Z]{1,3}\d{5,})',
+            r'(\d+:\d+-[A-Za-z]+-\d+-[A-Z]+)',
+        ]
+        for pattern in case_no_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                result["case_number"] = match.group(1).strip()
+                break
+
+        # Try to extract court name
+        court_patterns = [
+            r'(SUPERIOR\s+COURT\s+OF\s+[A-Z\s,]+)',
+            r'(UNITED\s+STATES\s+DISTRICT\s+COURT[A-Z\s,]+)',
+            r'(CIRCUIT\s+COURT\s+OF\s+[A-Z\s,]+)',
+        ]
+        for pattern in court_patterns:
+            match = re.search(pattern, text_upper)
+            if match:
+                result["court_name"] = match.group(1).strip().title()
+                break
+
+        # Try to extract motion title
+        motion_patterns = [
+            r'(MOTION\s+TO\s+[A-Z\s]+)',
+            r'(MOTION\s+FOR\s+[A-Z\s]+)',
+        ]
+        for pattern in motion_patterns:
+            match = re.search(pattern, text_upper)
+            if match:
+                result["motion_title"] = match.group(1).strip().title()
+                break
+
+        # Try to detect plaintiff/defendant from "vs" or "v."
+        vs_pattern = r'([A-Z][A-Za-z\s,\.]+?)\s+(?:vs\.?|v\.)\s+([A-Z][A-Za-z\s,\.]+?)(?:\n|CASE|$)'
+        match = re.search(vs_pattern, text)
+        if match:
+            plaintiffs_str = match.group(1).strip()
+            defendants_str = match.group(2).strip()
+            result["plaintiffs"] = [plaintiffs_str]
+            result["defendants"] = [defendants_str]
 
         return result
 

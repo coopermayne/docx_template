@@ -237,3 +237,47 @@ def extract_first_page_text(pdf_path: str) -> str:
         print(f"Fallback extraction failed: {e}")
 
     return ""
+
+
+def extract_first_n_pages_text(pdf_path: str, n: int = 2) -> str:
+    """
+    Extract text from the first N pages of a PDF.
+
+    Args:
+        pdf_path: Path to the PDF file
+        n: Number of pages to extract (default 2)
+
+    Returns:
+        Text content from the first N pages combined
+    """
+    try:
+        reader = PdfReader(pdf_path)
+        texts = []
+        for i, page in enumerate(reader.pages):
+            if i >= n:
+                break
+            text = page.extract_text()
+            if text:
+                texts.append(text)
+        if texts:
+            return "\n\n".join(texts)
+    except Exception as e:
+        print(f"Error extracting first {n} pages: {e}")
+
+    # Fallback to pdfplumber
+    try:
+        import pdfplumber
+        with pdfplumber.open(pdf_path) as pdf:
+            texts = []
+            for i, page in enumerate(pdf.pages):
+                if i >= n:
+                    break
+                text = page.extract_text()
+                if text:
+                    texts.append(text)
+            if texts:
+                return "\n\n".join(texts)
+    except Exception as e:
+        print(f"Fallback extraction failed: {e}")
+
+    return ""

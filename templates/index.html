@@ -18,9 +18,51 @@
                     <button class="nav-btn" :class="{ 'active': currentPage === 'rfp' }" @click="switchPage('rfp')">
                         RFP Tool
                     </button>
+                    <button class="nav-btn" :class="{ 'active': currentPage === 'motion_opposition' }" @click="switchPage('motion_opposition')">
+                        Motion Opposition
+                    </button>
                     <button class="nav-btn" :class="{ 'active': currentPage === 'objections' }" @click="switchPage('objections')">
                         Manage Objections
                     </button>
+                    <button class="nav-btn" :class="{ 'active': currentPage === 'users' }" @click="switchPage('users')">
+                        Manage Users
+                    </button>
+                    <div class="user-selector" style="margin-left: 1rem; position: relative;">
+                        <button class="nav-btn" @click="showUserDropdown = !showUserDropdown" style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span x-text="currentUser ? currentUser.icon : '👤'" style="font-size: 1.2rem;"></span>
+                            <span x-text="currentUser ? currentUser.name : 'Sign In'"></span>
+                            <span style="font-size: 0.7rem;">▼</span>
+                        </button>
+                        <div x-show="showUserDropdown" @click.away="showUserDropdown = false"
+                             class="user-dropdown" style="position: absolute; right: 0; top: 100%; background: white; border: 1px solid var(--gray-300); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; z-index: 100; margin-top: 0.5rem;">
+                            <div style="padding: 0.5rem 0;">
+                                <template x-for="user in users" :key="user.id">
+                                    <button @click="selectUser(user)"
+                                            style="display: flex; align-items: center; gap: 0.75rem; width: 100%; padding: 0.75rem 1rem; border: none; background: none; cursor: pointer; text-align: left;"
+                                            :style="currentUser?.id === user.id ? 'background: var(--gray-100);' : ''"
+                                            @mouseenter="$el.style.background = 'var(--gray-100)'"
+                                            @mouseleave="$el.style.background = currentUser?.id === user.id ? 'var(--gray-100)' : 'none'">
+                                        <span x-text="user.icon" style="font-size: 1.3rem;"></span>
+                                        <div>
+                                            <div style="font-weight: 500;" x-text="user.name"></div>
+                                            <div style="font-size: 0.75rem; color: var(--gray-500);" x-text="'Bar #' + user.bar_number"></div>
+                                        </div>
+                                    </button>
+                                </template>
+                                <div x-show="users.length === 0" style="padding: 0.75rem 1rem; color: var(--gray-500); font-size: 0.875rem;">
+                                    No users configured
+                                </div>
+                                <div x-show="currentUser" style="border-top: 1px solid var(--gray-200); margin-top: 0.5rem; padding-top: 0.5rem;">
+                                    <button @click="signOut()"
+                                            style="width: 100%; padding: 0.75rem 1rem; border: none; background: none; cursor: pointer; text-align: left; color: var(--gray-600);"
+                                            @mouseenter="$el.style.background = 'var(--gray-100)'"
+                                            @mouseleave="$el.style.background = 'none'">
+                                        Sign Out
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </nav>
             </div>
         </header>
@@ -361,6 +403,60 @@
             </div>
             </div><!-- End RFP Tool Page -->
 
+            <!-- Motion Opposition Page -->
+            <div x-show="currentPage === 'motion_opposition'">
+                <div class="card">
+                    <h2 class="card-title">Motion Opposition Generator</h2>
+                    <p style="color: var(--gray-600); margin-bottom: 1.5rem;">
+                        Upload a motion to extract case information and begin drafting your opposition papers.
+                    </p>
+
+                    <!-- Error Alert -->
+                    <div x-show="motionError" class="alert alert-error" x-text="motionError"></div>
+
+                    <!-- Upload Zone -->
+                    <div class="upload-zone"
+                         :class="{ 'dragover': motionDragging }"
+                         @dragover.prevent="motionDragging = true"
+                         @dragleave.prevent="motionDragging = false"
+                         @drop.prevent="handleMotionDrop($event)"
+                         @click="$refs.motionInput.click()">
+                        <div class="upload-zone-icon">📄</div>
+                        <div class="upload-zone-text">
+                            <template x-if="!motionUploading">
+                                <span>Drag & drop your motion PDF here, or click to browse</span>
+                            </template>
+                            <template x-if="motionUploading">
+                                <span class="loading">
+                                    <span class="spinner"></span>
+                                    Analyzing motion...
+                                </span>
+                            </template>
+                        </div>
+                        <div class="upload-zone-hint">PDF files only</div>
+                    </div>
+                    <input type="file"
+                           x-ref="motionInput"
+                           accept=".pdf"
+                           style="display: none"
+                           @change="handleMotionSelect($event)">
+
+                    <!-- Motion Info Result -->
+                    <template x-if="motionInfo">
+                        <div style="margin-top: 1.5rem;">
+                            <h3 class="card-title">Extracted Motion Information</h3>
+                            <p style="color: var(--gray-600); margin-bottom: 1rem; font-size: 0.875rem;">
+                                Filename: <span x-text="motionFilename"></span>
+                            </p>
+                            <pre style="background: var(--gray-100); border: 1px solid var(--gray-300); border-radius: 8px; padding: 1rem; overflow-x: auto; font-size: 0.875rem; line-height: 1.5;" x-text="JSON.stringify(motionInfo, null, 2)"></pre>
+                            <div class="actions-bar" style="margin-top: 1rem;">
+                                <button class="btn btn-secondary" @click="clearMotion()">Upload Another Motion</button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div><!-- End Motion Opposition Page -->
+
             <!-- Manage Objections Page -->
             <div x-show="currentPage === 'objections'">
                 <div class="card">
@@ -408,6 +504,123 @@
                     </div>
                 </div>
             </div><!-- End Manage Objections Page -->
+
+            <!-- Manage Users Page -->
+            <div x-show="currentPage === 'users'">
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <h2 class="card-title" style="margin: 0;">Manage Users</h2>
+                        <button class="btn btn-primary" @click="showAddUser = true">+ Add User</button>
+                    </div>
+
+                    <p style="color: var(--gray-600); margin-bottom: 1.5rem;">
+                        Configure attorney users who can sign in and generate documents.
+                    </p>
+
+                    <!-- Error Alert -->
+                    <div x-show="userError" class="alert alert-error" x-text="userError"></div>
+
+                    <!-- Users List -->
+                    <div class="objections-list">
+                        <template x-for="user in managedUsers" :key="user.id">
+                            <div class="objection-item">
+                                <div class="objection-item-header">
+                                    <div class="objection-item-title" style="display: flex; align-items: center; gap: 0.75rem;">
+                                        <span x-text="user.icon" style="font-size: 1.5rem;"></span>
+                                        <div>
+                                            <strong x-text="user.name"></strong>
+                                            <div style="font-size: 0.875rem; color: var(--gray-500);">
+                                                Bar #<span x-text="user.bar_number"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="objection-item-actions">
+                                        <button class="btn btn-sm btn-secondary" @click="editUser(user)">Edit</button>
+                                    </div>
+                                </div>
+                                <div class="objection-item-body">
+                                    <div class="objection-field">
+                                        <label>Email:</label>
+                                        <p x-text="user.email"></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div x-show="managedUsers.length === 0" style="text-align: center; padding: 2rem; color: var(--gray-500);">
+                        No users configured. Click "Add User" to create one.
+                    </div>
+                </div>
+            </div><!-- End Manage Users Page -->
+
+            <!-- Add/Edit User Modal -->
+            <div x-show="showAddUser || editingUser" class="modal-overlay" @click.self="closeUserModal()">
+                <div class="modal">
+                    <div class="modal-header">
+                        <h3 x-text="editingUser ? 'Edit User' : 'Add New User'"></h3>
+                        <button class="btn-icon" @click="closeUserModal()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>Name</label>
+                            <input type="text" x-model="userForm.name"
+                                   placeholder="e.g., John Smith"
+                                   class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>Bar Number</label>
+                            <input type="text" x-model="userForm.bar_number"
+                                   placeholder="e.g., 123456"
+                                   class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" x-model="userForm.email"
+                                   placeholder="e.g., john@lawfirm.com"
+                                   class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>Icon</label>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                <template x-for="icon in userIcons" :key="icon">
+                                    <button type="button"
+                                            @click="userForm.icon = icon"
+                                            style="padding: 0.5rem; font-size: 1.5rem; border: 2px solid; border-radius: 8px; cursor: pointer; background: white;"
+                                            :style="userForm.icon === icon ? 'border-color: var(--primary); background: var(--primary-light);' : 'border-color: var(--gray-300);'"
+                                            x-text="icon"></button>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button x-show="editingUser" class="btn btn-danger" style="margin-right: auto;" @click="confirmDeleteUser(editingUser)">Delete</button>
+                        <button class="btn btn-secondary" @click="closeUserModal()">Cancel</button>
+                        <button class="btn btn-primary" @click="saveUser()" :disabled="savingUser">
+                            <span x-show="!savingUser" x-text="editingUser ? 'Save Changes' : 'Add User'"></span>
+                            <span x-show="savingUser" class="loading"><span class="spinner"></span> Saving...</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Delete User Confirmation Modal -->
+            <div x-show="deletingUser" class="modal-overlay" @click.self="deletingUser = null">
+                <div class="modal" style="max-width: 400px;">
+                    <div class="modal-header">
+                        <h3>Delete User</h3>
+                        <button class="btn-icon" @click="deletingUser = null">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Are you sure you want to delete "<strong x-text="deletingUser?.name"></strong>"?</p>
+                        <p style="color: var(--gray-600); font-size: 0.875rem; margin-top: 0.5rem;">This action cannot be undone.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" @click="deletingUser = null">Cancel</button>
+                        <button class="btn btn-danger" @click="deleteUser()">Delete</button>
+                    </div>
+                </div>
+            </div>
 
             <!-- Add/Edit Objection Modal -->
             <div x-show="showAddObjection || editingObjection" class="modal-overlay" @click.self="closeObjectionModal()">
@@ -496,6 +709,13 @@
 
                 objections: [],
 
+                // Motion Opposition state
+                motionDragging: false,
+                motionUploading: false,
+                motionError: null,
+                motionInfo: null,
+                motionFilename: null,
+
                 // Objections Management state
                 managedObjections: [],
                 objectionError: null,
@@ -510,24 +730,46 @@
                     argument_template: ''
                 },
 
+                // Users state
+                users: [],
+                currentUser: null,
+                showUserDropdown: false,
+                managedUsers: [],
+                userError: null,
+                showAddUser: false,
+                editingUser: null,
+                deletingUser: null,
+                savingUser: false,
+                userIcons: ['👤', '👨‍💼', '👩‍💼', '👨‍⚖️', '👩‍⚖️', '🧑‍💼', '⚖️', '📋'],
+                userForm: {
+                    name: '',
+                    bar_number: '',
+                    email: '',
+                    icon: '👤'
+                },
+
                 async init() {
                     // Load objection presets
                     try {
-                        const data = await API.getObjectionPresets();
+                        const data = await API.getObjections();
                         this.objections = data.objections || [];
                     } catch (e) {
                         console.error('Failed to load objections:', e);
-                        // Use default objections if API fails
-                        this.objections = [
-                            { id: 'vague', name: 'Vague and Ambiguous', short_name: 'Vague' },
-                            { id: 'overbroad', name: 'Overbroad', short_name: 'Overbroad' },
-                            { id: 'unduly_burdensome', name: 'Unduly Burdensome', short_name: 'Burden' },
-                            { id: 'privilege', name: 'Attorney-Client Privilege', short_name: 'Privilege' },
-                            { id: 'work_product', name: 'Work Product', short_name: 'Work Product' },
-                            { id: 'relevance', name: 'Not Relevant', short_name: 'Relevance' },
-                            { id: 'compound', name: 'Compound', short_name: 'Compound' },
-                            { id: 'assumes_facts', name: 'Assumes Facts', short_name: 'Assumes Facts' }
-                        ];
+                        this.objections = [];
+                    }
+
+                    // Load users
+                    try {
+                        const data = await API.getUsers();
+                        this.users = data.users || [];
+                        // Restore current user from localStorage
+                        const savedUserId = localStorage.getItem('currentUserId');
+                        if (savedUserId) {
+                            this.currentUser = this.users.find(u => u.id == savedUserId) || null;
+                        }
+                    } catch (e) {
+                        console.error('Failed to load users:', e);
+                        this.users = [];
                     }
                 },
 
@@ -785,11 +1027,61 @@
                     this.error = null;
                 },
 
+                // Motion Opposition methods
+                async handleMotionDrop(event) {
+                    this.motionDragging = false;
+                    const files = event.dataTransfer.files;
+                    if (files.length > 0) {
+                        const file = files[0];
+                        const isPdf = file.type === 'application/pdf' ||
+                                      file.name.toLowerCase().endsWith('.pdf');
+                        if (isPdf) {
+                            await this.uploadMotion(file);
+                        } else {
+                            this.motionError = 'Please upload a PDF file';
+                        }
+                    }
+                },
+
+                async handleMotionSelect(event) {
+                    const files = event.target.files;
+                    if (files.length > 0) {
+                        await this.uploadMotion(files[0]);
+                    }
+                    // Reset the input so the same file can be selected again
+                    event.target.value = '';
+                },
+
+                async uploadMotion(file) {
+                    this.motionUploading = true;
+                    this.motionError = null;
+                    this.motionInfo = null;
+                    this.motionFilename = null;
+
+                    try {
+                        const data = await API.uploadMotion(file);
+                        this.motionInfo = data.motion_info;
+                        this.motionFilename = data.filename;
+                    } catch (e) {
+                        this.motionError = e.message;
+                    } finally {
+                        this.motionUploading = false;
+                    }
+                },
+
+                clearMotion() {
+                    this.motionInfo = null;
+                    this.motionFilename = null;
+                    this.motionError = null;
+                },
+
                 // Page navigation
                 async switchPage(page) {
                     this.currentPage = page;
                     if (page === 'objections') {
                         await this.loadManagedObjections();
+                    } else if (page === 'users') {
+                        await this.loadManagedUsers();
                     }
                 },
 
@@ -877,7 +1169,7 @@
 
                         await this.loadManagedObjections();
                         // Also refresh the objections used in RFP tool
-                        const data = await API.getObjectionPresets();
+                        const data = await API.getObjections();
                         this.objections = data.objections || [];
 
                         this.closeObjectionModal();
@@ -897,12 +1189,120 @@
                         await API.deleteObjection(this.deletingObjection.id);
                         await this.loadManagedObjections();
                         // Also refresh the objections used in RFP tool
-                        const data = await API.getObjectionPresets();
+                        const data = await API.getObjections();
                         this.objections = data.objections || [];
 
                         this.deletingObjection = null;
                     } catch (e) {
                         this.objectionError = e.message;
+                    }
+                },
+
+                // User selection methods
+                selectUser(user) {
+                    this.currentUser = user;
+                    this.showUserDropdown = false;
+                    localStorage.setItem('currentUserId', user.id);
+                },
+
+                signOut() {
+                    this.currentUser = null;
+                    this.showUserDropdown = false;
+                    localStorage.removeItem('currentUserId');
+                },
+
+                // Users Management methods
+                async loadManagedUsers() {
+                    this.userError = null;
+                    try {
+                        const data = await API.getUsers();
+                        this.managedUsers = data.users || [];
+                    } catch (e) {
+                        this.userError = e.message;
+                    }
+                },
+
+                editUser(user) {
+                    this.editingUser = user;
+                    this.userForm = {
+                        name: user.name,
+                        bar_number: user.bar_number,
+                        email: user.email,
+                        icon: user.icon || '👤'
+                    };
+                },
+
+                confirmDeleteUser(user) {
+                    this.deletingUser = user;
+                },
+
+                closeUserModal() {
+                    this.showAddUser = false;
+                    this.editingUser = null;
+                    this.userForm = {
+                        name: '',
+                        bar_number: '',
+                        email: '',
+                        icon: '👤'
+                    };
+                },
+
+                async saveUser() {
+                    this.userError = null;
+                    this.savingUser = true;
+
+                    try {
+                        if (this.editingUser) {
+                            // Update existing
+                            await API.updateUser(this.editingUser.id, {
+                                name: this.userForm.name,
+                                bar_number: this.userForm.bar_number,
+                                email: this.userForm.email,
+                                icon: this.userForm.icon
+                            });
+                        } else {
+                            // Create new
+                            await API.createUser({
+                                name: this.userForm.name,
+                                bar_number: this.userForm.bar_number,
+                                email: this.userForm.email,
+                                icon: this.userForm.icon
+                            });
+                        }
+
+                        await this.loadManagedUsers();
+                        // Also refresh the users dropdown
+                        const data = await API.getUsers();
+                        this.users = data.users || [];
+
+                        this.closeUserModal();
+                    } catch (e) {
+                        this.userError = e.message;
+                    } finally {
+                        this.savingUser = false;
+                    }
+                },
+
+                async deleteUser() {
+                    if (!this.deletingUser) return;
+
+                    this.userError = null;
+
+                    try {
+                        await API.deleteUser(this.deletingUser.id);
+                        await this.loadManagedUsers();
+                        // Also refresh the users dropdown
+                        const data = await API.getUsers();
+                        this.users = data.users || [];
+
+                        // If deleted user was current user, sign out
+                        if (this.currentUser?.id === this.deletingUser.id) {
+                            this.signOut();
+                        }
+
+                        this.deletingUser = null;
+                    } catch (e) {
+                        this.userError = e.message;
                     }
                 }
             };

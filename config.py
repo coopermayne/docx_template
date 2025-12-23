@@ -27,3 +27,7 @@ class Config:
     # Claude Analysis Settings
     # Number of RFP requests to analyze per API call (for chunking large RFPs)
     ANALYSIS_CHUNK_SIZE = int(os.environ.get('ANALYSIS_CHUNK_SIZE', 10))
+
+    # Supabase (cloud storage for presets and data)
+    SUPABASE_URL = os.environ.get('SUPABASE_URL')  # e.g., https://xxxx.supabase.co
+    SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY')  # public anon key
