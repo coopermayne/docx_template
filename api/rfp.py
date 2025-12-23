@@ -16,6 +16,32 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def process_court_name(court_name: str) -> str:
+    """
+    Process court_name: convert literal \\n to actual newline, remove commas, ensure uppercase.
+    """
+    if not court_name:
+        return court_name
+    # AI might return literal backslash-n, convert to actual newline
+    court_name = court_name.replace('\\n', '\n')
+    # Remove any commas and ensure uppercase
+    court_name = court_name.replace(',', '').upper()
+    return court_name
+
+
+def process_case_info(case_info: dict) -> dict:
+    """
+    Process extracted case_info, particularly normalizing court_name format.
+    """
+    if not case_info:
+        return case_info
+
+    if 'court_name' in case_info:
+        case_info['court_name'] = process_court_name(case_info['court_name'])
+
+    return case_info
+
+
 @rfp_bp.route('/upload', methods=['POST'])
 def upload_rfp():
     """
@@ -73,6 +99,7 @@ def upload_rfp():
             first_page_text = extract_first_page_text(file_path)
             if first_page_text:
                 case_info = claude_service.extract_case_info(first_page_text)
+                case_info = process_case_info(case_info)
         except Exception as e:
             print(f"Case info extraction failed: {e}")
             # Continue without case info - it can be extracted later
@@ -308,6 +335,7 @@ def extract_case_info(session_id):
             }), 422
 
         case_info = claude_service.extract_case_info(first_page_text)
+        case_info = process_case_info(case_info)
 
         session.case_info = case_info
         session_store.update(session)

@@ -169,13 +169,18 @@ const API = {
     },
 
     // Generate endpoints
-    async generateResponse(sessionId, includeReasoning = false) {
+    async generateResponse(sessionId, includeReasoning = false, associateInfo = {}) {
         const response = await fetch(`${this.baseUrl}/generate/${sessionId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ include_reasoning: includeReasoning })
+            body: JSON.stringify({
+                include_reasoning: includeReasoning,
+                associate_name: associateInfo.associate_name || '',
+                associate_bar: associateInfo.associate_bar || '',
+                associate_email: associateInfo.associate_email || ''
+            })
         });
 
         if (!response.ok) {

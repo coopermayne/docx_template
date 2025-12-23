@@ -1,17 +1,119 @@
 import json
-import os
+import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Dict, Any, Optional
-from models import RFPRequest, Document, Objection
+from functools import wraps
+from typing import List, Dict, Any, Optional, Callable
+from models import RFPRequest, Document
 from config import Config
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Try to import anthropic, but allow graceful fallback
 try:
-    from anthropic import Anthropic
+    from anthropic import Anthropic, APIError, RateLimitError, APIConnectionError
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
     Anthropic = None
+    APIError = Exception
+    RateLimitError = Exception
+    APIConnectionError = Exception
+
+
+class ClaudeAPIError(Exception):
+    """Structured error for Claude API failures."""
+
+    def __init__(self, message: str, error_code: str, retryable: bool = False, details: Optional[Dict] = None):
+        super().__init__(message)
+        self.message = message
+        self.error_code = error_code
+        self.retryable = retryable
+        self.details = details or {}
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'error': self.message,
+            'error_code': self.error_code,
+            'retryable': self.retryable,
+            'details': self.details
+        }
+
+
+def retry_with_backoff(
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+    max_delay: float = 30.0,
+    exponential_base: float = 2.0
+) -> Callable:
+    """
+    Decorator that retries a function with exponential backoff.
+
+    Args:
+        max_retries: Maximum number of retry attempts
+        base_delay: Initial delay between retries in seconds
+        max_delay: Maximum delay between retries in seconds
+        exponential_base: Base for exponential backoff calculation
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except RateLimitError as e:
+                    last_exception = e
+                    if attempt < max_retries:
+                        delay = min(base_delay * (exponential_base ** attempt), max_delay)
+                        logger.warning(f"Rate limited on attempt {attempt + 1}/{max_retries + 1}, "
+                                     f"retrying in {delay:.1f}s: {e}")
+                        time.sleep(delay)
+                    else:
+                        logger.error(f"Rate limit exceeded after {max_retries + 1} attempts")
+                        raise ClaudeAPIError(
+                            message="Claude API rate limit exceeded. Please try again later.",
+                            error_code="RATE_LIMIT_EXCEEDED",
+                            retryable=True,
+                            details={'attempts': max_retries + 1}
+                        ) from e
+                except APIConnectionError as e:
+                    last_exception = e
+                    if attempt < max_retries:
+                        delay = min(base_delay * (exponential_base ** attempt), max_delay)
+                        logger.warning(f"Connection error on attempt {attempt + 1}/{max_retries + 1}, "
+                                     f"retrying in {delay:.1f}s: {e}")
+                        time.sleep(delay)
+                    else:
+                        logger.error(f"Connection failed after {max_retries + 1} attempts")
+                        raise ClaudeAPIError(
+                            message="Unable to connect to Claude API. Please check your connection.",
+                            error_code="CONNECTION_ERROR",
+                            retryable=True,
+                            details={'attempts': max_retries + 1}
+                        ) from e
+                except APIError as e:
+                    # Non-retryable API errors (e.g., invalid request, auth errors)
+                    logger.error(f"Claude API error: {e}")
+                    raise ClaudeAPIError(
+                        message=f"Claude API error: {str(e)}",
+                        error_code="API_ERROR",
+                        retryable=False,
+                        details={'original_error': str(e)}
+                    ) from e
+
+            # Should not reach here, but just in case
+            if last_exception:
+                raise last_exception
+
+        return wrapper
+    return decorator
+
+
+# Maximum parallel workers for chunk processing
+MAX_PARALLEL_WORKERS = 5
 
 
 class ClaudeService:
@@ -133,7 +235,7 @@ class ClaudeService:
             "properties": {
                 "court_name": {
                     "type": "string",
-                    "description": "Full name of the court (e.g., 'Superior Court of California, County of Los Angeles')"
+                    "description": "Full name of the court in ALL CAPS with newline (\\n) between parts, NO COMMAS. Example: 'SUPERIOR COURT OF CALIFORNIA\\nCOUNTY OF LOS ANGELES' or 'UNITED STATES DISTRICT COURT\\nCENTRAL DISTRICT OF CALIFORNIA'"
                 },
                 "header_plaintiffs": {
                     "type": "string",
@@ -190,70 +292,56 @@ class ClaudeService:
 
     EXTRACT_MOTION_INFO_TOOL = {
         "name": "submit_motion_info",
-        "description": "Submit the extracted information from a motion document",
+        "description": "Submit the extracted information from a motion document for generating an opposition",
         "input_schema": {
             "type": "object",
             "properties": {
-                "motion_title": {
-                    "type": "string",
-                    "description": "The title of the motion (e.g., 'Motion to Compel Discovery', 'Motion for Summary Judgment')"
-                },
-                "case_number": {
-                    "type": "string",
-                    "description": "Case number (e.g., '2:24-cv-01234-ABC-XYZ', 'BC123456')"
-                },
                 "court_name": {
                     "type": "string",
                     "description": "Full name of the court in ALL CAPS with newline (\\n) between parts, NO COMMAS. Example: 'UNITED STATES DISTRICT COURT\\nCENTRAL DISTRICT OF CALIFORNIA'"
                 },
-                "judge_name": {
+                "plaintiff_caption": {
                     "type": "string",
-                    "description": "Name of the presiding judge (e.g., 'Hon. John Smith'). Empty string if not found."
+                    "description": "Plaintiff name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple, join with semicolons. Include 'et al.' if present."
                 },
-                "magistrate_judge_name": {
+                "defendant_caption": {
                     "type": "string",
-                    "description": "Name of the magistrate judge if any (e.g., 'Hon. Jane Doe'). Empty string if not found."
-                },
-                "hearing_date": {
-                    "type": "string",
-                    "description": "Date of the hearing (e.g., 'January 15, 2025'). Empty string if not specified."
-                },
-                "hearing_time": {
-                    "type": "string",
-                    "description": "Time of the hearing (e.g., '9:00 a.m.', '2:30 p.m.'). Empty string if not specified."
-                },
-                "hearing_location": {
-                    "type": "string",
-                    "description": "Location/courtroom for the hearing (e.g., 'Courtroom 5A, 255 E Temple St, Los Angeles, CA'). Empty string if not specified."
-                },
-                "plaintiffs": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "List of plaintiff names from the case caption"
-                },
-                "defendants": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "List of defendant names from the case caption"
+                    "description": "Defendant name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple, join with semicolons. Include 'et al.' if present."
                 },
                 "multiple_plaintiffs": {
                     "type": "boolean",
-                    "description": "True if there are multiple plaintiffs"
+                    "description": "True if there are multiple plaintiffs (or 'et al.' is present)"
                 },
                 "multiple_defendants": {
                     "type": "boolean",
-                    "description": "True if there are multiple defendants"
+                    "description": "True if there are multiple defendants (or 'et al.' is present)"
                 },
-                "moving_party": {
+                "case_number": {
                     "type": "string",
-                    "description": "The party who filed/authored this motion (e.g., 'Defendant Acme Corp', 'Plaintiff John Smith')"
+                    "description": "Case number exactly as it appears (e.g., '2:24-cv-01234-ABC-XYZ', 'BC123456')"
+                },
+                "judge_name": {
+                    "type": "string",
+                    "description": "Name of the presiding district judge in format 'Judge [LastName]' (e.g., 'Judge Smith'). Empty string if not found or uncertain."
+                },
+                "mag_judge_name": {
+                    "type": "string",
+                    "description": "Name of the magistrate judge in format 'Magistrate Judge [LastName]' (e.g., 'Magistrate Judge Doe'). Empty string if not found or uncertain."
+                },
+                "motion_title": {
+                    "type": "string",
+                    "description": "The title of the original motion being opposed, exactly as it appears (e.g., 'Motion to Compel Discovery', 'Motion for Summary Judgment')"
+                },
+                "document_title": {
+                    "type": "string",
+                    "description": "The title for our opposition document (e.g., 'Opposition to Motion to Compel Discovery', 'Opposition to Motion for Summary Judgment')"
                 },
                 "filename": {
                     "type": "string",
                     "description": "Generated filename for the opposition document using standard legal abbreviations (e.g., '2025.01.15 Opp MTD', '2025.01.15 Opp MSJ')"
                 }
             },
-            "required": ["motion_title", "case_number", "court_name", "judge_name", "magistrate_judge_name", "hearing_date", "hearing_time", "hearing_location", "plaintiffs", "defendants", "multiple_plaintiffs", "multiple_defendants", "moving_party", "filename"]
+            "required": ["court_name", "plaintiff_caption", "defendant_caption", "multiple_plaintiffs", "multiple_defendants", "case_number", "judge_name", "mag_judge_name", "motion_title", "document_title", "filename"]
         }
     }
 
@@ -299,7 +387,10 @@ class ClaudeService:
 ## Instructions:
 Extract the following information from the document:
 
-1. **court_name**: The full name of the court (e.g., "Superior Court of California, County of Los Angeles", "United States District Court, Central District of California")
+1. **court_name**: The full name of the court in ALL CAPS with a newline (\\n) between parts. NO COMMAS. Format examples:
+   - "SUPERIOR COURT OF CALIFORNIA\\nCOUNTY OF LOS ANGELES"
+   - "UNITED STATES DISTRICT COURT\\nCENTRAL DISTRICT OF CALIFORNIA"
+   Use \\n for the line break between court name parts.
 
 2. **header_plaintiffs**: The plaintiff name(s) exactly as they appear in the case caption. If multiple plaintiffs, include all of them.
 
@@ -331,14 +422,11 @@ Call the submit_case_info tool with the extracted information.
 """
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=1000,
+            response = self._call_claude_api(
+                prompt=prompt,
                 tools=[self.EXTRACT_CASE_INFO_TOOL],
-                tool_choice={"type": "tool", "name": "submit_case_info"},
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
+                tool_name="submit_case_info",
+                max_tokens=1000
             )
 
             # Extract the tool use response
@@ -368,10 +456,14 @@ Call the submit_case_info tool with the extracted information.
                     }
 
             # Fallback if no tool use found
+            logger.warning("No tool use found in extract_case_info response, using fallback")
             return self._fallback_extract_case_info(first_page_text)
 
+        except ClaudeAPIError as e:
+            logger.error(f"Claude API error in extract_case_info: {e.message}")
+            return self._fallback_extract_case_info(first_page_text)
         except Exception as e:
-            print(f"Claude API error in extract_case_info: {e}")
+            logger.error(f"Unexpected error in extract_case_info: {e}")
             return self._fallback_extract_case_info(first_page_text)
 
     def _fallback_extract_case_info(self, text: str) -> Dict[str, str]:
@@ -484,7 +576,10 @@ Call the submit_case_info tool with the extracted information.
             two_page_text: Text content from the first two pages of the motion
 
         Returns:
-            Dictionary with extracted motion information
+            Dictionary with extracted motion information matching template fields:
+            - court_name, plaintiff_caption, defendant_caption, multiple_plaintiffs,
+            - multiple_defendants, case_number, judge_name, mag_judge_name,
+            - document_title, filename
         """
         if not self.is_available():
             return self._fallback_extract_motion_info(two_page_text)
@@ -492,113 +587,76 @@ Call the submit_case_info tool with the extracted information.
         from datetime import datetime
         today_date = datetime.now().strftime('%Y.%m.%d')
 
-        prompt = f"""You are a legal assistant extracting information from a motion document filed in court.
+        prompt = f"""You are a legal assistant extracting information from a motion document filed in court to generate an opposition document.
 
 ## Document Text (first two pages):
 {two_page_text}
 
 ## Instructions:
-Extract the following information from the motion document. IMPORTANT: If you cannot confidently determine a field's value, leave it as an empty string. Do not guess.
+Extract the following information from the motion document. These fields will be used directly in the opposition document template.
 
-1. **motion_title**: The title/name of the motion (e.g., "Motion to Compel Discovery", "Motion for Summary Judgment"). Leave empty if not found.
-
-2. **case_number**: The case number exactly as it appears (e.g., "2:24-cv-01234-ABC-XYZ", "BC123456"). Leave empty if not found.
-
-3. **court_name**: The full name of the court in ALL CAPS with a newline between parts. NO COMMAS. Format example:
-   "UNITED STATES DISTRICT COURT\nCENTRAL DISTRICT OF CALIFORNIA"
-   or "SUPERIOR COURT OF CALIFORNIA\nCOUNTY OF LOS ANGELES"
+1. **court_name**: The full name of the court in ALL CAPS with a newline between parts. NO COMMAS. Format example:
+   "UNITED STATES DISTRICT COURT\\nCENTRAL DISTRICT OF CALIFORNIA"
+   or "SUPERIOR COURT OF CALIFORNIA\\nCOUNTY OF LOS ANGELES"
    Use \\n for the line break. Leave empty if not found.
 
-4. **judge_name**: The presiding district judge. Federal case numbers often contain judge initials (e.g., "2:24-cv-01234-DOC" where "DOC" = Judge David O. Carter). Use your knowledge of federal judges in the identified district to determine the judge's last name. Format as "Judge [LastName]" (e.g., "Judge Carter", "Judge Wright"). ONLY provide if you can confidently identify the actual judge. Leave empty if uncertain.
+2. **plaintiff_caption**: The plaintiff name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple plaintiffs, join with semicolons. Include "et al." if present.
 
-5. **magistrate_judge_name**: The magistrate judge. Federal case numbers may include magistrate initials after the district judge (e.g., "2:24-cv-01234-DOC-JPR" where "JPR" = Magistrate Judge Jean P. Rosenbluth). Use your knowledge of magistrate judges in the identified district. Format as "Magistrate Judge [LastName]" (e.g., "Magistrate Judge Rosenbluth"). ONLY provide if you can confidently identify the actual magistrate judge. Leave empty if uncertain.
+3. **defendant_caption**: The defendant name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple defendants, join with semicolons. Include "et al." if present.
 
-6. **hearing_date**: The scheduled hearing date (e.g., "January 15, 2025"). Leave empty if not specified.
+4. **multiple_plaintiffs**: True if there is more than one plaintiff or "et al." is present, false otherwise.
 
-7. **hearing_time**: The scheduled hearing time (e.g., "9:00 a.m."). Leave empty if not specified.
+5. **multiple_defendants**: True if there is more than one defendant or "et al." is present, false otherwise.
 
-8. **hearing_location**: The courtroom/location for the hearing. Leave empty if not specified.
+6. **case_number**: The case number exactly as it appears (e.g., "2:24-cv-01234-ABC-XYZ", "BC123456"). Leave empty if not found.
 
-9. **plaintiffs**: Extract ALL plaintiff names from the case caption as an array. Include "et al." if mentioned. Leave as empty array if not found.
+7. **judge_name**: The presiding district judge in format "Judge [LastName]" (e.g., "Judge Smith"). Leave as empty string if not found or uncertain.
 
-10. **defendants**: Extract ALL defendant names from the case caption as an array. Include "et al." if mentioned. Leave as empty array if not found.
+8. **mag_judge_name**: The magistrate judge in format "Magistrate Judge [LastName]" (e.g., "Magistrate Judge Doe"). Leave as empty string if not found or uncertain.
 
-11. **multiple_plaintiffs**: True if there is more than one plaintiff, false otherwise.
+9. **motion_title**: The title of the original motion being opposed, exactly as it appears (e.g., "Motion to Compel Discovery", "Motion for Summary Judgment").
 
-12. **multiple_defendants**: True if there is more than one defendant, false otherwise.
+10. **document_title**: Generate the title for our opposition document based on the motion being opposed (e.g., "Opposition to Motion to Compel Discovery", "Opposition to Motion for Summary Judgment").
 
-13. **moving_party**: The party who filed this motion based on who signed it or whose counsel prepared it. Format as "Defendant [Name]" or "Plaintiff [Name]". Leave empty if not determinable.
-
-14. **filename**: Generate a filename for the opposition document using today's date ({today_date}) and standard legal abbreviations.
+11. **filename**: Generate a filename for the opposition document using today's date ({today_date}) and standard legal abbreviations.
 
 ## Filename Generation Rules:
 - Format: [date] Opp [motion abbreviation]
 - Date format: yyyy.mm.dd (today is {today_date})
 - Do NOT use periods in abbreviations (use "Ans" not "Ans.")
 - Do NOT include the case name (file will be in the case folder)
-- Use plural forms when appropriate (Defs for multiple defendants, Plts for multiple plaintiffs)
 
 ## Standard Abbreviations:
-| Term | Abbreviation |
-|------|--------------|
-| Complaint | Compl |
-| Answer | Ans |
-| First Amended Complaint | FAC |
-| Second Amended Complaint | SAC |
-| Opposition | Opp |
-| Motion | Mot |
+| Motion Type | Abbreviation |
+|-------------|--------------|
 | Motion to Dismiss | MTD |
 | Motion for Summary Judgment | MSJ |
-| Reply | Reply |
-| Declaration | Decl |
-| Memorandum | Memo |
-| Request | Req |
-| Statement of Facts | SOF |
-| Response | Resp |
-| Notice | Not |
-| Exhibit(s) | Exh |
-| Stipulation | Stip |
-| Certificate of Service | COS |
-| Supplemental | Supp |
-| Joint Status Report | JSR |
-| Case Management Statement | CMS |
-| Discovery | Disc |
-| Interrogatories | ROG |
-| Request for Production | RFP |
-| Request for Admission | RFA |
-| Defendant | Def |
-| Defendants | Defs |
-| Plaintiff | Plt |
-| Plaintiffs | Plts |
-| Proposed Order | PO |
-| Deposition | Depo |
-| In Support Of | ISO |
-| Order to Show Cause | OSC |
 | Motion in Limine | MIL |
 | Motion to Compel | Mot to Compel |
+| Motion to Compel Discovery | Mot to Compel Disc |
+| Motion to Compel Arbitration | Mot to Compel Arb |
+| Motion to Strike | Mot to Strike |
+| Motion to Remand | Mot to Remand |
+| Motion for Reconsideration | Mot Recons |
+| Motion for Sanctions | Mot Sanctions |
 
 ## Filename Examples:
 - Opposition to Motion to Dismiss → "{today_date} Opp MTD"
 - Opposition to Motion for Summary Judgment → "{today_date} Opp MSJ"
 - Opposition to Motion to Compel Discovery → "{today_date} Opp Mot to Compel Disc"
-- Opposition to Motion to Compel Arbitration → "{today_date} Opp Mot to Compel Arb"
 - Opposition to Motion in Limine → "{today_date} Opp MIL"
-- Opposition to Defendant's Motion to Strike → "{today_date} Opp Def Mot to Strike"
 
-CRITICAL: Only provide information you can extract from the document or confidently determine from your knowledge. Leave fields as empty strings rather than guessing.
+CRITICAL: Only provide information you can extract from the document. Leave fields as empty strings rather than guessing.
 
 Call the submit_motion_info tool with the extracted information.
 """
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=1500,
+            response = self._call_claude_api(
+                prompt=prompt,
                 tools=[self.EXTRACT_MOTION_INFO_TOOL],
-                tool_choice={"type": "tool", "name": "submit_motion_info"},
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
+                tool_name="submit_motion_info",
+                max_tokens=1500
             )
 
             # Extract the tool use response
@@ -607,27 +665,28 @@ Call the submit_motion_info tool with the extracted information.
                     result = block.input
                     # Ensure all expected keys exist with defaults
                     return {
-                        "motion_title": result.get("motion_title", ""),
-                        "case_number": result.get("case_number", ""),
                         "court_name": result.get("court_name", ""),
-                        "judge_name": result.get("judge_name", ""),
-                        "magistrate_judge_name": result.get("magistrate_judge_name", ""),
-                        "hearing_date": result.get("hearing_date", ""),
-                        "hearing_time": result.get("hearing_time", ""),
-                        "hearing_location": result.get("hearing_location", ""),
-                        "plaintiffs": result.get("plaintiffs", []),
-                        "defendants": result.get("defendants", []),
+                        "plaintiff_caption": result.get("plaintiff_caption", ""),
+                        "defendant_caption": result.get("defendant_caption", ""),
                         "multiple_plaintiffs": result.get("multiple_plaintiffs", False),
                         "multiple_defendants": result.get("multiple_defendants", False),
-                        "moving_party": result.get("moving_party", ""),
+                        "case_number": result.get("case_number", ""),
+                        "judge_name": result.get("judge_name", ""),
+                        "mag_judge_name": result.get("mag_judge_name", ""),
+                        "motion_title": result.get("motion_title", ""),
+                        "document_title": result.get("document_title", ""),
                         "filename": result.get("filename", "")
                     }
 
             # Fallback if no tool use found
+            logger.warning("No tool use found in extract_motion_info response, using fallback")
             return self._fallback_extract_motion_info(two_page_text)
 
+        except ClaudeAPIError as e:
+            logger.error(f"Claude API error in extract_motion_info: {e.message}")
+            return self._fallback_extract_motion_info(two_page_text)
         except Exception as e:
-            print(f"Claude API error in extract_motion_info: {e}")
+            logger.error(f"Unexpected error in extract_motion_info: {e}")
             return self._fallback_extract_motion_info(two_page_text)
 
     def _fallback_extract_motion_info(self, text: str) -> Dict[str, Any]:
@@ -638,19 +697,16 @@ Call the submit_motion_info tool with the extracted information.
         today_date = datetime.now().strftime('%Y.%m.%d')
 
         result = {
-            "motion_title": "",
-            "case_number": "",
             "court_name": "",
-            "judge_name": "",
-            "magistrate_judge_name": "",
-            "hearing_date": "",
-            "hearing_time": "",
-            "hearing_location": "",
-            "plaintiffs": [],
-            "defendants": [],
+            "plaintiff_caption": "",
+            "defendant_caption": "",
             "multiple_plaintiffs": False,
             "multiple_defendants": False,
-            "moving_party": "",
+            "case_number": "",
+            "judge_name": "",
+            "mag_judge_name": "",
+            "motion_title": "",
+            "document_title": "Opposition to Motion",
             "filename": f"{today_date} Opp"
         }
 
@@ -677,10 +733,10 @@ Call the submit_motion_info tool with the extracted information.
         for pattern in court_patterns:
             match = re.search(pattern, text_upper)
             if match:
-                result["court_name"] = match.group(1).strip().title()
+                result["court_name"] = match.group(1).strip()
                 break
 
-        # Try to extract motion title
+        # Try to extract motion title and generate document_title
         motion_patterns = [
             r'(MOTION\s+TO\s+[A-Z\s]+)',
             r'(MOTION\s+FOR\s+[A-Z\s]+)',
@@ -688,17 +744,20 @@ Call the submit_motion_info tool with the extracted information.
         for pattern in motion_patterns:
             match = re.search(pattern, text_upper)
             if match:
-                result["motion_title"] = match.group(1).strip().title()
+                motion_title = match.group(1).strip().title()
+                result["motion_title"] = motion_title
+                result["document_title"] = f"Opposition to {motion_title}"
                 break
 
-        # Try to detect plaintiff/defendant from "vs" or "v."
+        # Try to detect plaintiff/defendant from "vs" or "v." - preserve original case
         vs_pattern = r'([A-Z][A-Za-z\s,\.]+?)\s+(?:vs\.?|v\.)\s+([A-Z][A-Za-z\s,\.]+?)(?:\n|CASE|$)'
         match = re.search(vs_pattern, text)
         if match:
-            plaintiffs_str = match.group(1).strip()
-            defendants_str = match.group(2).strip()
-            result["plaintiffs"] = [plaintiffs_str]
-            result["defendants"] = [defendants_str]
+            result["plaintiff_caption"] = match.group(1).strip()
+            result["defendant_caption"] = match.group(2).strip()
+            # Check for multiple parties
+            result["multiple_plaintiffs"] = any(sep in result["plaintiff_caption"].lower() for sep in [';', ' and ', 'et al'])
+            result["multiple_defendants"] = any(sep in result["defendant_caption"].lower() for sep in [';', ' and ', 'et al'])
 
         return result
 
@@ -752,14 +811,11 @@ Extract each request with its number and exact verbatim text. Call the submit_re
 """
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=8000,
+            response = self._call_claude_api(
+                prompt=prompt,
                 tools=[self.EXTRACT_REQUESTS_TOOL],
-                tool_choice={"type": "tool", "name": "submit_requests"},
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
+                tool_name="submit_requests",
+                max_tokens=8000
             )
 
             # Extract the tool use response
@@ -767,10 +823,14 @@ Extract each request with its number and exact verbatim text. Call the submit_re
                 if block.type == "tool_use" and block.name == "submit_requests":
                     return block.input.get("requests", [])
 
+            logger.warning("No tool use found in extract_requests response")
             return []
 
+        except ClaudeAPIError as e:
+            logger.error(f"Claude API error in extract_requests: {e.message}")
+            return []
         except Exception as e:
-            print(f"Claude API error in extract_requests: {e}")
+            logger.error(f"Unexpected error in extract_requests: {e}")
             return []
 
     def analyze_requests(
@@ -815,46 +875,38 @@ Extract each request with its number and exact verbatim text. Call the submit_re
 
         all_results = {}
 
-        # Try sequential first to debug, then switch to parallel
-        use_parallel = True
+        # Process chunks in parallel with capped workers
+        num_workers = min(len(chunks), MAX_PARALLEL_WORKERS)
+        logger.info(f"Using {num_workers} parallel workers for {len(chunks)} chunks")
 
-        if use_parallel:
-            with ThreadPoolExecutor(max_workers=len(chunks)) as executor:
-                # Submit all chunks
-                future_to_chunk = {
-                    executor.submit(self._analyze_chunk, chunk, documents, objections): i
-                    for i, chunk in enumerate(chunks)
-                }
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            # Submit all chunks
+            future_to_chunk = {
+                executor.submit(self._analyze_chunk, chunk, documents, objections): i
+                for i, chunk in enumerate(chunks)
+            }
 
-                # Collect results as they complete
-                for future in as_completed(future_to_chunk):
-                    chunk_idx = future_to_chunk[future]
-                    try:
-                        chunk_results = future.result()
-                        print(f"Chunk {chunk_idx} returned {len(chunk_results)} results")
-                        sys.stdout.flush()
-                        all_results.update(chunk_results)
-                    except Exception as e:
-                        print(f"Chunk {chunk_idx} failed: {e}")
-                        sys.stdout.flush()
-                        import traceback
-                        traceback.print_exc()
-                        # Fallback for failed chunk
-                        failed_chunk = chunks[chunk_idx]
-                        fallback = self._fallback_analysis(failed_chunk, documents, objections)
-                        all_results.update(fallback)
-        else:
-            # Sequential for debugging
-            for i, chunk in enumerate(chunks):
-                print(f"Processing chunk {i}...")
-                sys.stdout.flush()
-                chunk_results = self._analyze_chunk(chunk, documents, objections)
-                print(f"Chunk {i} returned {len(chunk_results)} results")
-                sys.stdout.flush()
-                all_results.update(chunk_results)
+            # Collect results as they complete
+            for future in as_completed(future_to_chunk):
+                chunk_idx = future_to_chunk[future]
+                try:
+                    chunk_results = future.result(timeout=120)  # 2 minute timeout per chunk
+                    logger.info(f"Chunk {chunk_idx} returned {len(chunk_results)} results")
+                    all_results.update(chunk_results)
+                except ClaudeAPIError as e:
+                    logger.warning(f"Chunk {chunk_idx} failed with API error: {e.message}")
+                    # Fallback for failed chunk
+                    failed_chunk = chunks[chunk_idx]
+                    fallback = self._fallback_analysis(failed_chunk, documents, objections)
+                    all_results.update(fallback)
+                except Exception as e:
+                    logger.error(f"Chunk {chunk_idx} failed unexpectedly: {e}")
+                    # Fallback for failed chunk
+                    failed_chunk = chunks[chunk_idx]
+                    fallback = self._fallback_analysis(failed_chunk, documents, objections)
+                    all_results.update(fallback)
 
-        print(f"Total results: {len(all_results)}")
-        sys.stdout.flush()
+        logger.info(f"Analysis complete: {len(all_results)} total results")
         return all_results
 
     def _analyze_chunk(
@@ -864,47 +916,57 @@ Extract each request with its number and exact verbatim text. Call the submit_re
         objections: List[Dict[str, Any]]
     ) -> Dict[str, Dict[str, Any]]:
         """Analyze a single chunk of requests."""
-        import sys
         request_numbers = [r.number for r in requests]
-        print(f"Analyzing chunk with requests: {request_numbers}", flush=True)
+        logger.info(f"Analyzing chunk with requests: {request_numbers}")
 
         prompt = self._build_analysis_prompt(requests, documents, objections)
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=16000,
+            response = self._call_claude_api(
+                prompt=prompt,
                 tools=[self.ANALYSIS_TOOL],
-                tool_choice={"type": "tool", "name": "submit_analysis"},
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
+                tool_name="submit_analysis",
+                max_tokens=16000
             )
 
             # Extract the tool use response
-            print(f"Response stop_reason: {response.stop_reason}", flush=True)
-            print(f"Response content types: {[b.type for b in response.content]}", flush=True)
             for block in response.content:
-                if block.type == "text":
-                    print(f"Text block: {block.text[:200] if block.text else 'empty'}", flush=True)
-                if block.type == "tool_use":
-                    print(f"Tool name: {block.name}, input keys: {list(block.input.keys())}", flush=True)
-                    if block.name == "submit_analysis":
-                        print(f"Tool input: {str(block.input)[:500]}", flush=True)
-                        result = block.input.get("analyses", {})
-                        print(f"Chunk returned keys: {list(result.keys())}", flush=True)
-                        return result
+                if block.type == "tool_use" and block.name == "submit_analysis":
+                    result = block.input.get("analyses", {})
+                    logger.debug(f"Chunk returned keys: {list(result.keys())}")
+                    return result
 
             # Fallback if no tool use found
-            print(f"No tool use found for chunk {request_numbers}, using fallback", flush=True)
+            logger.warning(f"No tool use found for chunk {request_numbers}, using fallback")
             return self._fallback_analysis(requests, documents, objections)
 
+        except ClaudeAPIError:
+            # Re-raise structured errors for the caller to handle
+            raise
         except Exception as e:
-            print(f"Claude API error for chunk {request_numbers}: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
-            sys.stdout.flush()
+            logger.error(f"Unexpected error for chunk {request_numbers}: {e}")
             return self._fallback_analysis(requests, documents, objections)
+
+    @retry_with_backoff(max_retries=3, base_delay=1.0, max_delay=30.0)
+    def _call_claude_api(
+        self,
+        prompt: str,
+        tools: List[Dict],
+        tool_name: str,
+        max_tokens: int = 4000
+    ):
+        """
+        Make a Claude API call with retry logic.
+
+        This method is decorated with retry_with_backoff to handle transient errors.
+        """
+        return self.client.messages.create(
+            model=self.model,
+            max_tokens=max_tokens,
+            tools=tools,
+            tool_choice={"type": "tool", "name": tool_name},
+            messages=[{"role": "user", "content": prompt}]
+        )
 
     def _build_analysis_prompt(
         self,
@@ -1069,17 +1131,25 @@ Draft a 2-3 sentence argument supporting this objection specific to this request
 """
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=500,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
+            response = self._call_claude_api_simple(prompt, max_tokens=500)
             return response.content[0].text.strip()
-        except Exception as e:
-            print(f"Claude API error: {e}")
+        except ClaudeAPIError as e:
+            logger.error(f"Claude API error in generate_objection_argument: {e.message}")
             return objection.get('argument_template', '')
+        except Exception as e:
+            logger.error(f"Unexpected error in generate_objection_argument: {e}")
+            return objection.get('argument_template', '')
+
+    @retry_with_backoff(max_retries=3, base_delay=1.0, max_delay=30.0)
+    def _call_claude_api_simple(self, prompt: str, max_tokens: int = 1000):
+        """
+        Make a simple Claude API call (no tools) with retry logic.
+        """
+        return self.client.messages.create(
+            model=self.model,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}]
+        )
 
     def compose_response(
         self,
@@ -1160,14 +1230,11 @@ Call the submit_response tool with your composed response.
 """
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=2000,
+            response = self._call_claude_api(
+                prompt=prompt,
                 tools=[self.COMPOSE_RESPONSE_TOOL],
-                tool_choice={"type": "tool", "name": "submit_response"},
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
+                tool_name="submit_response",
+                max_tokens=2000
             )
 
             # Extract the tool use response
@@ -1179,12 +1246,18 @@ Call the submit_response tool with your composed response.
                     }
 
             # Fallback if no tool use found
+            logger.warning("No tool use found in compose_response, using fallback")
             return self._fallback_compose_response(
                 request_text, objections, documents, responding_party
             )
 
+        except ClaudeAPIError as e:
+            logger.error(f"Claude API error in compose_response: {e.message}")
+            return self._fallback_compose_response(
+                request_text, objections, documents, responding_party
+            )
         except Exception as e:
-            print(f"Claude API error in compose_response: {e}")
+            logger.error(f"Unexpected error in compose_response: {e}")
             return self._fallback_compose_response(
                 request_text, objections, documents, responding_party
             )

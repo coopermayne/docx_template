@@ -49,40 +49,6 @@ def save_session(session_id: str, data: dict) -> None:
         json.dump(data, f, indent=2)
 
 
-def is_valid_judge_name(name: str) -> bool:
-    """
-    Check if a judge name is in the correct format: "Judge [LastName]" or "Magistrate Judge [LastName]".
-    Returns False for empty, generic, or placeholder values.
-    """
-    if not name or not name.strip():
-        return False
-
-    name = name.strip()
-
-    # Must start with "Judge " or "Magistrate Judge "
-    name_lower = name.lower()
-    if not (name_lower.startswith('judge ') or name_lower.startswith('magistrate judge ')):
-        return False
-
-    # Extract the last name part
-    if name_lower.startswith('magistrate judge '):
-        last_name = name[17:].strip()  # After "Magistrate Judge "
-    else:
-        last_name = name[6:].strip()  # After "Judge "
-
-    # Last name must be at least 2 characters and not a placeholder
-    if len(last_name) < 2:
-        return False
-
-    invalid_patterns = [
-        'unknown', 'n/a', 'none', 'tbd', 'not found', 'not specified'
-    ]
-    if last_name.lower() in invalid_patterns:
-        return False
-
-    return True
-
-
 def generate_default_filename(motion_title: str) -> str:
     """
     Generate a default filename based on naming conventions.
@@ -148,48 +114,13 @@ def generate_default_filename(motion_title: str) -> str:
     return f"{date_str} Opp Mot {short_title}"
 
 
-def transform_motion_info_to_template_vars(motion_info: dict) -> dict:
+def process_motion_info(motion_info: dict) -> dict:
     """
-    Transform AI-extracted motion info to template variables.
+    Process AI-extracted motion info for use in template.
 
-    Template variables:
-    - court_name: Full court name
-    - case_number: Case number
-    - pltCaption: Plaintiff caption (for header)
-    - defCaption: Defendant caption (for header)
-    - document_title: Opposition document title
-    - multiple_plaintiffs / multiple_plt: Boolean
-    - multiple_def: Boolean
-    - judge: Judge name (optional, only if valid name found)
-    - mag_judge: Magistrate judge (optional, only if valid name found)
-    - filename: Default filename for saving
+    Normalizes court_name format and ensures filename has a fallback.
+    The AI now outputs fields that match the template directly.
     """
-    # Join plaintiffs/defendants for caption
-    plaintiffs = motion_info.get('plaintiffs', [])
-    defendants = motion_info.get('defendants', [])
-
-    plt_caption = '; '.join(plaintiffs) if plaintiffs else ''
-    def_caption = '; '.join(defendants) if defendants else ''
-
-    # Generate opposition title from motion title
-    motion_title = motion_info.get('motion_title', '')
-    if motion_title:
-        # Convert "Motion to Compel" -> "Opposition to Motion to Compel"
-        if motion_title.lower().startswith('motion'):
-            doc_title = f"Opposition to {motion_title}"
-        else:
-            doc_title = f"Opposition to {motion_title}"
-    else:
-        doc_title = "Opposition to Motion"
-
-    # Only include judge names if they look like real names
-    judge_name = motion_info.get('judge_name', '')
-    mag_judge_name = motion_info.get('magistrate_judge_name', '')
-
-    # Use AI-generated filename if available, otherwise fall back to programmatic generation
-    ai_filename = motion_info.get('filename', '')
-    filename = ai_filename if ai_filename else generate_default_filename(motion_title)
-
     # Process court_name: convert literal \n to actual newline, ensure uppercase
     court_name = motion_info.get('court_name', '')
     # AI might return literal backslash-n, convert to actual newline
@@ -197,27 +128,23 @@ def transform_motion_info_to_template_vars(motion_info: dict) -> dict:
     # Remove any commas and ensure uppercase
     court_name = court_name.replace(',', '').upper()
 
+    # Use AI-generated filename if available, otherwise fall back to programmatic generation
+    filename = motion_info.get('filename', '')
+    if not filename:
+        filename = generate_default_filename(motion_info.get('document_title', ''))
+
     return {
         'court_name': court_name,
-        'case_number': motion_info.get('case_number', ''),
-        'pltCaption': plt_caption,
-        'defCaption': def_caption,
-        'document_title': doc_title,
+        'plaintiff_caption': motion_info.get('plaintiff_caption', ''),
+        'defendant_caption': motion_info.get('defendant_caption', ''),
         'multiple_plaintiffs': motion_info.get('multiple_plaintiffs', False),
-        'multiple_plt': motion_info.get('multiple_plaintiffs', False),
-        'multiple_def': motion_info.get('multiple_defendants', False),
-        'judge': judge_name if is_valid_judge_name(judge_name) else '',
-        'mag_judge': mag_judge_name if is_valid_judge_name(mag_judge_name) else '',
-        'filename': filename,
-        # Keep original arrays for editing
-        'plaintiffs': plaintiffs,
-        'defendants': defendants,
-        # Keep original motion info for reference
-        'motion_title': motion_title,
-        'hearing_date': motion_info.get('hearing_date', ''),
-        'hearing_time': motion_info.get('hearing_time', ''),
-        'hearing_location': motion_info.get('hearing_location', ''),
-        'moving_party': motion_info.get('moving_party', '')
+        'multiple_defendants': motion_info.get('multiple_defendants', False),
+        'case_number': motion_info.get('case_number', ''),
+        'judge_name': motion_info.get('judge_name', ''),
+        'mag_judge_name': motion_info.get('mag_judge_name', ''),
+        'motion_title': motion_info.get('motion_title', ''),
+        'document_title': motion_info.get('document_title', 'Opposition to Motion'),
+        'filename': filename
     }
 
 
@@ -265,8 +192,8 @@ def upload_motion():
         # Extract motion information using Claude
         motion_info = claude_service.extract_motion_info(two_page_text)
 
-        # Transform to template variables
-        template_vars = transform_motion_info_to_template_vars(motion_info)
+        # Process for template use (normalize court_name, ensure filename)
+        template_vars = process_motion_info(motion_info)
 
         # Create session data
         session_data = {
@@ -325,7 +252,7 @@ def update_motion_session(session_id):
 
     # Validate required fields
     template_vars = data['template_vars']
-    required_fields = ['court_name', 'case_number', 'pltCaption', 'defCaption', 'document_title', 'filename']
+    required_fields = ['court_name', 'case_number', 'plaintiff_caption', 'defendant_caption', 'document_title', 'filename']
     missing = [f for f in required_fields if not template_vars.get(f)]
     if missing:
         return jsonify({
@@ -334,7 +261,7 @@ def update_motion_session(session_id):
         }), 400
 
     # Validate boolean fields
-    bool_fields = ['multiple_plaintiffs', 'multiple_plt', 'multiple_def']
+    bool_fields = ['multiple_plaintiffs', 'multiple_defendants']
     for field in bool_fields:
         if field in template_vars and not isinstance(template_vars[field], bool):
             return jsonify({
@@ -401,18 +328,17 @@ def generate_opposition(session_id):
 
         context = {
             'court_name': court_name_for_word,
-            'case_number': template_vars.get('case_number', ''),
-            'pltCaption': template_vars.get('pltCaption', ''),
-            'defCaption': template_vars.get('defCaption', ''),
-            'document_title': template_vars.get('document_title', ''),
+            'plaintiff_caption': template_vars.get('plaintiff_caption', ''),
+            'defendant_caption': template_vars.get('defendant_caption', ''),
             'multiple_plaintiffs': template_vars.get('multiple_plaintiffs', False),
-            'multiple_plt': template_vars.get('multiple_plt', False),
-            'multiple_def': template_vars.get('multiple_def', False),
-            'judge': template_vars.get('judge', ''),
-            'mag_judge': template_vars.get('mag_judge', ''),
-            'associateName': associate_name,
-            'associateBar': associate_bar,
-            'associateEmail': associate_email
+            'multiple_defendants': template_vars.get('multiple_defendants', False),
+            'case_number': template_vars.get('case_number', ''),
+            'judge_name': template_vars.get('judge_name', ''),
+            'mag_judge_name': template_vars.get('mag_judge_name', ''),
+            'document_title': template_vars.get('document_title', ''),
+            'associate_name': associate_name,
+            'associate_bar': associate_bar,
+            'associate_email': associate_email
         }
 
         # Render template

@@ -50,6 +50,11 @@ def generate_response(session_id):
     multiple_responding_parties = data.get('multiple_responding_parties') if 'multiple_responding_parties' in data else case_info.get('multiple_responding_parties', False)
     include_reasoning = data.get('include_reasoning', False)
 
+    # Associate info from signed-in user
+    associate_name = data.get('associate_name', '')
+    associate_bar = data.get('associate_bar', '')
+    associate_email = data.get('associate_email', '')
+
     # These may not be in case_info, so just use request data or defaults
     client_name = data.get('client_name') or header_plaintiffs
     requesting_party = data.get('requesting_party') or propounding_party
@@ -76,7 +81,10 @@ def generate_response(session_id):
             multiple_defendants=multiple_defendants,
             multiple_propounding_parties=multiple_propounding_parties,
             multiple_responding_parties=multiple_responding_parties,
-            include_reasoning=include_reasoning
+            include_reasoning=include_reasoning,
+            associate_name=associate_name,
+            associate_bar=associate_bar,
+            associate_email=associate_email
         )
 
         # Generate download filename: yyyy.mm.dd FILENAME.docx
@@ -108,9 +116,18 @@ def generate_response(session_id):
 
         return response
 
+    except ValueError as e:
+        # ValueError is raised when template is missing
+        return jsonify({
+            'error': str(e),
+            'error_code': 'TEMPLATE_NOT_FOUND',
+            'message': 'Please upload an RFP template in the Templates section.'
+        }), 400
+
     except Exception as e:
         return jsonify({
             'error': 'Failed to generate document',
+            'error_code': 'GENERATION_ERROR',
             'message': str(e)
         }), 500
 

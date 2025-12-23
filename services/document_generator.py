@@ -1,10 +1,9 @@
 import os
 import tempfile
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Optional
 from docxtpl import DocxTemplate
-from models import Session, RFPRequest, Document
-from config import Config
+from models import Session
 from api.objections import load_preset
 
 
@@ -12,7 +11,6 @@ class DocumentGenerator:
     """Generate Word documents for RFP responses."""
 
     def __init__(self):
-        self.template_dir = Config.WORD_TEMPLATE_FOLDER
         self._uploaded_template_path = None  # Track for cleanup
 
     def generate_response(
@@ -32,7 +30,10 @@ class DocumentGenerator:
         multiple_defendants: bool = False,
         multiple_propounding_parties: bool = False,
         multiple_responding_parties: bool = False,
-        include_reasoning: bool = False
+        include_reasoning: bool = False,
+        associate_name: str = "",
+        associate_bar: str = "",
+        associate_email: str = ""
     ) -> str:
         """
         Generate an RFP response document.
@@ -86,8 +87,11 @@ class DocumentGenerator:
         if not document_title:
             document_title = f"{responding_party.upper()}'S RESPONSES TO {propounding_party.upper()}'S {set_number} SET OF REQUESTS FOR PRODUCTION OF DOCUMENTS"
 
+        # Convert \n to \a for Word soft line breaks in court_name
+        court_name_for_word = court_name.replace('\n', '\a')
+
         context = {
-            'court_name': court_name,
+            'court_name': court_name_for_word,
             'header_plaintiffs': header_plaintiffs,
             'header_defendants': header_defendants,
             'case_no': case_no,
@@ -105,6 +109,9 @@ class DocumentGenerator:
             'multiple_propounding_parties': multiple_propounding_parties,
             'multiple_responding_parties': multiple_responding_parties,
             'date': datetime.now().strftime('%B %d, %Y'),
+            'associate_name': associate_name,
+            'associate_bar': associate_bar,
+            'associate_email': associate_email,
             'requests': []
         }
 
@@ -154,28 +161,16 @@ class DocumentGenerator:
 
             context['requests'].append(request_data)
 
-        # Try to get uploaded template from Supabase first
-        template_path = None
-        try:
-            from api.templates import get_latest_template_path
-            self._uploaded_template_path = get_latest_template_path('rfp')
-            if self._uploaded_template_path:
-                template_path = self._uploaded_template_path
-        except Exception:
-            pass
+        # Get template from Supabase
+        from api.templates import get_latest_template_path
+        template_path = get_latest_template_path('rfp')
 
-        # Fall back to local templates
         if not template_path:
-            template_path = os.path.join(self.template_dir, 'rfp_template.docx')
-            if not os.path.exists(template_path):
-                template_path = os.path.join(self.template_dir, 'rfp_response.docx')
+            raise ValueError("No RFP template found. Please upload a template in the Templates section.")
 
-        if template_path and os.path.exists(template_path):
-            doc = DocxTemplate(template_path)
-            doc.render(context)
-        else:
-            # Generate document programmatically if no template
-            return self._generate_without_template(context)
+        self._uploaded_template_path = template_path
+        doc = DocxTemplate(template_path)
+        doc.render(context)
 
         # Save to temp file
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.docx')
@@ -256,93 +251,6 @@ class DocumentGenerator:
             parts.append(f"{responding_party} responds that there are no documents responsive to this Request.")
 
         return " ".join(parts)
-
-    def _generate_without_template(self, context: Dict[str, Any]) -> str:
-        """Generate document programmatically without a template."""
-        from docx import Document
-        from docx.shared import Pt, Inches
-        from docx.enum.text import WD_ALIGN_PARAGRAPH
-
-        doc = Document()
-
-        # Set up styles
-        style = doc.styles['Normal']
-        style.font.name = 'Times New Roman'
-        style.font.size = Pt(12)
-
-        # Title
-        title = doc.add_heading('RESPONSES TO REQUESTS FOR PRODUCTION OF DOCUMENTS', 0)
-        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        # Header info
-        doc.add_paragraph(f"PROPOUNDING PARTY: {context['propounding_party']}")
-        doc.add_paragraph(f"RESPONDING PARTY: {context['responding_party']}")
-        doc.add_paragraph(f"SET NUMBER: {context['set_number']}")
-        doc.add_paragraph()
-
-        # Each request
-        for req in context['requests']:
-            # Request header
-            doc.add_heading(f"REQUEST NO. {req['number']}:", level=2)
-            doc.add_paragraph(req['text'])
-            doc.add_paragraph()
-
-            # Response header
-            doc.add_heading(f"RESPONSE TO REQUEST NO. {req['number']}:", level=2)
-
-            # Objections - all in one paragraph
-            if req['objections']:
-                # Combine all objection formal language into one paragraph
-                objection_texts = [obj['formal_language'] for obj in req['objections']]
-                combined_objections = " ".join(objection_texts)
-                doc.add_paragraph(combined_objections)
-                doc.add_paragraph()
-
-            # Responsive documents - in one sentence
-            if req['documents']:
-                # Build document list as inline text
-                doc_parts = []
-                for doc_ref in req['documents']:
-                    bates_str = ""
-                    if doc_ref.get('bates_start'):
-                        bates_str = f" ({doc_ref['bates_start']}"
-                        if doc_ref.get('bates_end'):
-                            bates_str += f"-{doc_ref['bates_end']}"
-                        bates_str += ")"
-                    doc_parts.append(f"{doc_ref['filename']}{bates_str}")
-
-                # Join documents with commas and "and" for last item
-                if len(doc_parts) == 1:
-                    docs_text = doc_parts[0]
-                elif len(doc_parts) == 2:
-                    docs_text = f"{doc_parts[0]} and {doc_parts[1]}"
-                else:
-                    docs_text = ", ".join(doc_parts[:-1]) + f", and {doc_parts[-1]}"
-
-                if req['objections']:
-                    doc.add_paragraph(f"Subject to and without waiving the foregoing objections, {context['responding_party']} will produce the following documents responsive to this Request: {docs_text}.")
-                else:
-                    doc.add_paragraph(f"{context['responding_party']} will produce the following documents responsive to this Request: {docs_text}.")
-                doc.add_paragraph()
-
-            # No objections and no documents
-            if not req['objections'] and not req['documents']:
-                doc.add_paragraph(f"{context['responding_party']} responds that there are no documents responsive to this Request.")
-
-            doc.add_paragraph()
-
-        # Signature block
-        doc.add_paragraph()
-        doc.add_paragraph(f"DATED: {context['date']}")
-        doc.add_paragraph()
-        doc.add_paragraph(context['responding_party'])
-
-        # Save to temp file
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.docx')
-        doc.save(temp_file.name)
-        temp_file.close()
-
-        return temp_file.name
 
 
 # Global instance

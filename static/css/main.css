@@ -839,10 +839,7 @@ textarea.form-input {
     background: white;
     border: 1px solid var(--gray-200);
     border-radius: 10px;
-    padding: 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
+    padding: 0.75rem;
     transition: box-shadow 0.15s, border-color 0.15s;
 }
 
@@ -852,15 +849,13 @@ textarea.form-input {
 
 .template-tile-header {
     display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
+    align-items: center;
+    gap: 0.5rem;
 }
 
-.template-tile-actions {
+.template-tile-header > span:first-child {
     display: flex;
-    gap: 0.5rem;
-    padding-top: 0.5rem;
-    border-top: 1px solid var(--gray-100);
+    align-items: center;
 }
 
 .template-upload-tile {
@@ -887,4 +882,21 @@ textarea.form-input {
 .template-upload-tile.disabled {
     cursor: not-allowed;
     opacity: 0.5;
+}
+
+.template-download-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    font-size: 1rem;
+    line-height: 1;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+    border-radius: 4px;
+}
+
+.template-download-btn:hover {
+    opacity: 1;
+    background: var(--gray-100);
 }

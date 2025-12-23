@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify
 from services.session_store import session_store
-from services.claude_service import claude_service
+from services.claude_service import claude_service, ClaudeAPIError
 from api.objections import load_preset
 
 analyze_bp = Blueprint('analyze', __name__, url_prefix='/api/analyze')
@@ -60,6 +60,21 @@ def analyze_session(session_id):
             'message': 'Analysis complete'
         })
 
+    except ClaudeAPIError as e:
+        session.analysis_error = e.message
+        session_store.update(session)
+
+        response = {
+            'status': 'error',
+            'error': e.message,
+            'error_code': e.error_code,
+            'retryable': e.retryable,
+            'message': 'Analysis failed'
+        }
+        # Use 503 for retryable errors (service temporarily unavailable)
+        status_code = 503 if e.retryable else 500
+        return jsonify(response), status_code
+
     except Exception as e:
         session.analysis_error = str(e)
         session_store.update(session)
@@ -67,6 +82,8 @@ def analyze_session(session_id):
         return jsonify({
             'status': 'error',
             'error': str(e),
+            'error_code': 'INTERNAL_ERROR',
+            'retryable': False,
             'message': 'Analysis failed'
         }), 500
 
