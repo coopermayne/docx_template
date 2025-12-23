@@ -203,6 +203,52 @@ const API = {
         return this.uploadFile('/motion-opposition/upload', file);
     },
 
+    async getMotionSession(sessionId) {
+        return this.request(`/motion-opposition/${sessionId}`);
+    },
+
+    async updateMotionSession(sessionId, templateVars) {
+        return this.request(`/motion-opposition/${sessionId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ template_vars: templateVars })
+        });
+    },
+
+    async generateOpposition(sessionId, associateInfo) {
+        const response = await fetch(`${this.baseUrl}/motion-opposition/${sessionId}/generate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(associateInfo)
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Generation failed');
+        }
+
+        // Extract filename from Content-Disposition header
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'opposition.docx';
+        if (contentDisposition) {
+            const match = contentDisposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i);
+            if (match) {
+                filename = decodeURIComponent(match[1]);
+            }
+        }
+
+        // Return blob and filename for download
+        const blob = await response.blob();
+        return { blob, filename };
+    },
+
+    async deleteMotionSession(sessionId) {
+        return this.request(`/motion-opposition/${sessionId}`, {
+            method: 'DELETE'
+        });
+    },
+
     // Users endpoints
     async getUsers() {
         return this.request('/users');

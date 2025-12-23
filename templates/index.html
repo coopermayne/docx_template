@@ -30,18 +30,22 @@
                         <div x-show="showUserDropdown" @click.away="showUserDropdown = false"
                              class="user-dropdown" style="position: absolute; right: 0; top: 100%; background: white; border: 1px solid var(--gray-300); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 220px; z-index: 100; margin-top: 0.5rem;">
                             <div class="dropdown-menu">
-                                <template x-for="user in users" :key="user.id">
-                                    <a href="#" @click.prevent="selectUser(user)"
-                                       class="dropdown-item"
-                                       :class="{ 'active': currentUser?.id === user.id }">
-                                        <span x-text="user.icon"></span>
-                                        <span x-text="user.name.split(' ')[0]"></span>
-                                    </a>
+                                <!-- Show user list only when not logged in -->
+                                <template x-if="!currentUser">
+                                    <div>
+                                        <template x-for="user in users" :key="user.id">
+                                            <a href="#" @click.prevent="selectUser(user)"
+                                               class="dropdown-item">
+                                                <span x-text="user.icon"></span>
+                                                <span x-text="user.name.split(' ')[0]"></span>
+                                            </a>
+                                        </template>
+                                        <div x-show="users.length === 0" class="dropdown-item" style="color: var(--gray-500);">
+                                            No users yet
+                                        </div>
+                                        <div class="dropdown-divider"></div>
+                                    </div>
                                 </template>
-                                <div x-show="users.length === 0" class="dropdown-item" style="color: var(--gray-500);">
-                                    No users yet
-                                </div>
-                                <div class="dropdown-divider"></div>
                                 <a href="#" @click.prevent="switchPage('users'); showUserDropdown = false" class="dropdown-item">
                                     <span x-text="users.length === 0 ? '+ Add User' : 'Manage Users'"></span>
                                 </a>
@@ -400,16 +404,30 @@
 
             <!-- Motion Opposition Page -->
             <div x-show="currentPage === 'motion_opposition'">
-                <div class="card">
-                    <h2 class="card-title">Motion Opposition Generator</h2>
+                <!-- Steps Indicator -->
+                <ul class="steps" style="margin-bottom: 1.5rem;">
+                    <li class="step"
+                        :class="{ 'active': motionStep === 'upload', 'completed': motionStep === 'review' }">
+                        <span class="step-number">1</span>
+                        <span class="step-label">Upload Motion</span>
+                    </li>
+                    <li class="step"
+                        :class="{ 'active': motionStep === 'review' }">
+                        <span class="step-number">2</span>
+                        <span class="step-label">Review & Generate</span>
+                    </li>
+                </ul>
+
+                <!-- Error Alert -->
+                <div x-show="motionError" class="alert alert-error" x-text="motionError"></div>
+
+                <!-- Step 1: Upload -->
+                <div x-show="motionStep === 'upload'" class="card">
+                    <h2 class="card-title">Upload Motion</h2>
                     <p style="color: var(--gray-600); margin-bottom: 1.5rem;">
-                        Upload a motion to extract case information and begin drafting your opposition papers.
+                        Upload the motion you're opposing. We'll extract case information automatically.
                     </p>
 
-                    <!-- Error Alert -->
-                    <div x-show="motionError" class="alert alert-error" x-text="motionError"></div>
-
-                    <!-- Upload Zone -->
                     <div class="upload-zone"
                          :class="{ 'dragover': motionDragging }"
                          @dragover.prevent="motionDragging = true"
@@ -435,20 +453,235 @@
                            accept=".pdf"
                            style="display: none"
                            @change="handleMotionSelect($event)">
+                </div>
 
-                    <!-- Motion Info Result -->
-                    <template x-if="motionInfo">
-                        <div style="margin-top: 1.5rem;">
-                            <h3 class="card-title">Extracted Motion Information</h3>
-                            <p style="color: var(--gray-600); margin-bottom: 1rem; font-size: 0.875rem;">
-                                Filename: <span x-text="motionFilename"></span>
-                            </p>
-                            <pre style="background: var(--gray-100); border: 1px solid var(--gray-300); border-radius: 8px; padding: 1rem; overflow-x: auto; font-size: 0.875rem; line-height: 1.5;" x-text="JSON.stringify(motionInfo, null, 2)"></pre>
-                            <div class="actions-bar" style="margin-top: 1rem;">
-                                <button class="btn btn-secondary" @click="clearMotion()">Upload Another Motion</button>
+                <!-- Step 2: Review & Generate -->
+                <div x-show="motionStep === 'review'" class="card">
+                    <h2 class="card-title">Review Document Information</h2>
+                    <p style="color: var(--gray-600); margin-bottom: 1rem;">
+                        Source: <span x-text="motionFilename" style="font-weight: 500;"></span>
+                    </p>
+
+                    <!-- Document Info Display with Inline Edit -->
+                    <div class="motion-info-grid" style="display: grid; gap: 1rem; margin-bottom: 1.5rem;">
+                        <!-- Required Fields Section -->
+                        <div style="background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 8px; padding: 1rem;">
+                            <h4 style="margin: 0 0 1rem 0; color: var(--gray-700); font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">Case Information</h4>
+                            <div style="display: grid; gap: 0.75rem;">
+                                <!-- Court -->
+                                <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr auto; gap: 0.5rem; align-items: start;">
+                                    <span style="color: var(--gray-500); font-size: 0.875rem; padding-top: 0.25rem;">Court:</span>
+                                    <template x-if="editingField !== 'court_name'">
+                                        <span style="font-weight: 500; white-space: pre-line;" x-text="motionTemplateVars.court_name || '—'"></span>
+                                    </template>
+                                    <template x-if="editingField === 'court_name'">
+                                        <textarea x-model="editingValue" @keydown.escape="cancelInlineEdit()" class="form-input" style="padding: 0.25rem 0.5rem; font-size: 0.875rem; min-height: 3.5rem; resize: vertical;" placeholder="UNITED STATES DISTRICT COURT&#10;CENTRAL DISTRICT OF CALIFORNIA"></textarea>
+                                    </template>
+                                    <template x-if="editingField !== 'court_name'">
+                                        <button @click="startInlineEdit('court_name', motionTemplateVars.court_name)" class="edit-icon-btn" style="padding-top: 0.25rem;" title="Edit">&#9998;</button>
+                                    </template>
+                                    <template x-if="editingField === 'court_name'">
+                                        <div style="display: flex; gap: 0.25rem; padding-top: 0.25rem;">
+                                            <button @click="saveInlineEdit('court_name')" class="edit-icon-btn" style="color: #16a34a;" title="Save">&#10003;</button>
+                                            <button @click="cancelInlineEdit()" class="edit-icon-btn" style="color: #dc2626;" title="Cancel">&#10005;</button>
+                                        </div>
+                                    </template>
+                                </div>
+                                <!-- Case Number -->
+                                <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr auto; gap: 0.5rem; align-items: center;">
+                                    <span style="color: var(--gray-500); font-size: 0.875rem;">Case Number:</span>
+                                    <template x-if="editingField !== 'case_number'">
+                                        <span style="font-weight: 500;" x-text="motionTemplateVars.case_number || '—'"></span>
+                                    </template>
+                                    <template x-if="editingField === 'case_number'">
+                                        <input type="text" x-model="editingValue" @keydown.enter="saveInlineEdit('case_number')" @keydown.escape="cancelInlineEdit()" class="form-input" style="padding: 0.25rem 0.5rem; font-size: 0.875rem;">
+                                    </template>
+                                    <template x-if="editingField !== 'case_number'">
+                                        <button @click="startInlineEdit('case_number', motionTemplateVars.case_number)" class="edit-icon-btn" title="Edit">&#9998;</button>
+                                    </template>
+                                    <template x-if="editingField === 'case_number'">
+                                        <div style="display: flex; gap: 0.25rem;">
+                                            <button @click="saveInlineEdit('case_number')" class="edit-icon-btn" style="color: #16a34a;" title="Save">&#10003;</button>
+                                            <button @click="cancelInlineEdit()" class="edit-icon-btn" style="color: #dc2626;" title="Cancel">&#10005;</button>
+                                        </div>
+                                    </template>
+                                </div>
+                                <!-- Plaintiffs -->
+                                <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr auto; gap: 0.5rem; align-items: center;">
+                                    <span style="color: var(--gray-500); font-size: 0.875rem;">Plaintiff(s):</span>
+                                    <template x-if="editingField !== 'pltCaption'">
+                                        <span style="font-weight: 500;" x-text="motionTemplateVars.pltCaption || '—'"></span>
+                                    </template>
+                                    <template x-if="editingField === 'pltCaption'">
+                                        <input type="text" x-model="editingValue" @keydown.enter="saveInlineEdit('pltCaption')" @keydown.escape="cancelInlineEdit()" class="form-input" style="padding: 0.25rem 0.5rem; font-size: 0.875rem;">
+                                    </template>
+                                    <template x-if="editingField !== 'pltCaption'">
+                                        <button @click="startInlineEdit('pltCaption', motionTemplateVars.pltCaption)" class="edit-icon-btn" title="Edit">&#9998;</button>
+                                    </template>
+                                    <template x-if="editingField === 'pltCaption'">
+                                        <div style="display: flex; gap: 0.25rem;">
+                                            <button @click="saveInlineEdit('pltCaption')" class="edit-icon-btn" style="color: #16a34a;" title="Save">&#10003;</button>
+                                            <button @click="cancelInlineEdit()" class="edit-icon-btn" style="color: #dc2626;" title="Cancel">&#10005;</button>
+                                        </div>
+                                    </template>
+                                </div>
+                                <!-- Defendants -->
+                                <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr auto; gap: 0.5rem; align-items: center;">
+                                    <span style="color: var(--gray-500); font-size: 0.875rem;">Defendant(s):</span>
+                                    <template x-if="editingField !== 'defCaption'">
+                                        <span style="font-weight: 500;" x-text="motionTemplateVars.defCaption || '—'"></span>
+                                    </template>
+                                    <template x-if="editingField === 'defCaption'">
+                                        <input type="text" x-model="editingValue" @keydown.enter="saveInlineEdit('defCaption')" @keydown.escape="cancelInlineEdit()" class="form-input" style="padding: 0.25rem 0.5rem; font-size: 0.875rem;">
+                                    </template>
+                                    <template x-if="editingField !== 'defCaption'">
+                                        <button @click="startInlineEdit('defCaption', motionTemplateVars.defCaption)" class="edit-icon-btn" title="Edit">&#9998;</button>
+                                    </template>
+                                    <template x-if="editingField === 'defCaption'">
+                                        <div style="display: flex; gap: 0.25rem;">
+                                            <button @click="saveInlineEdit('defCaption')" class="edit-icon-btn" style="color: #16a34a;" title="Save">&#10003;</button>
+                                            <button @click="cancelInlineEdit()" class="edit-icon-btn" style="color: #dc2626;" title="Cancel">&#10005;</button>
+                                        </div>
+                                    </template>
+                                </div>
+                                <!-- Document Title -->
+                                <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr auto; gap: 0.5rem; align-items: center;">
+                                    <span style="color: var(--gray-500); font-size: 0.875rem;">Document Title:</span>
+                                    <template x-if="editingField !== 'document_title'">
+                                        <span style="font-weight: 500;" x-text="motionTemplateVars.document_title || '—'"></span>
+                                    </template>
+                                    <template x-if="editingField === 'document_title'">
+                                        <input type="text" x-model="editingValue" @keydown.enter="saveInlineEdit('document_title')" @keydown.escape="cancelInlineEdit()" class="form-input" style="padding: 0.25rem 0.5rem; font-size: 0.875rem;">
+                                    </template>
+                                    <template x-if="editingField !== 'document_title'">
+                                        <button @click="startInlineEdit('document_title', motionTemplateVars.document_title)" class="edit-icon-btn" title="Edit">&#9998;</button>
+                                    </template>
+                                    <template x-if="editingField === 'document_title'">
+                                        <div style="display: flex; gap: 0.25rem;">
+                                            <button @click="saveInlineEdit('document_title')" class="edit-icon-btn" style="color: #16a34a;" title="Save">&#10003;</button>
+                                            <button @click="cancelInlineEdit()" class="edit-icon-btn" style="color: #dc2626;" title="Cancel">&#10005;</button>
+                                        </div>
+                                    </template>
+                                </div>
+                                <!-- Filename -->
+                                <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr auto; gap: 0.5rem; align-items: center;">
+                                    <span style="color: var(--gray-500); font-size: 0.875rem;">Save As:</span>
+                                    <template x-if="editingField !== 'filename'">
+                                        <span style="font-weight: 500; font-family: monospace; font-size: 0.8rem;" x-text="(motionTemplateVars.filename || '—') + '.docx'"></span>
+                                    </template>
+                                    <template x-if="editingField === 'filename'">
+                                        <div style="display: flex; align-items: center; gap: 0.25rem;">
+                                            <input type="text" x-model="editingValue" @keydown.enter="saveInlineEdit('filename')" @keydown.escape="cancelInlineEdit()" class="form-input" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; font-family: monospace; flex: 1;">
+                                            <span style="color: var(--gray-500); font-size: 0.8rem;">.docx</span>
+                                        </div>
+                                    </template>
+                                    <template x-if="editingField !== 'filename'">
+                                        <button @click="startInlineEdit('filename', motionTemplateVars.filename)" class="edit-icon-btn" title="Edit filename">&#9998;</button>
+                                    </template>
+                                    <template x-if="editingField === 'filename'">
+                                        <div style="display: flex; gap: 0.25rem;">
+                                            <button @click="saveInlineEdit('filename')" class="edit-icon-btn" style="color: #16a34a;" title="Save">&#10003;</button>
+                                            <button @click="cancelInlineEdit()" class="edit-icon-btn" style="color: #dc2626;" title="Cancel">&#10005;</button>
+                                        </div>
+                                    </template>
+                                </div>
                             </div>
                         </div>
-                    </template>
+
+                        <!-- Optional Fields Section -->
+                        <div style="background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 8px; padding: 1rem;">
+                            <h4 style="margin: 0 0 1rem 0; color: var(--gray-700); font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">Additional Information</h4>
+                            <div style="display: grid; gap: 0.75rem;">
+                                <!-- Judge -->
+                                <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr auto; gap: 0.5rem; align-items: center;">
+                                    <span style="color: var(--gray-500); font-size: 0.875rem;">Judge:</span>
+                                    <template x-if="editingField !== 'judge'">
+                                        <span style="font-weight: 500;" :style="!motionTemplateVars.judge ? 'color: var(--gray-400);' : ''" x-text="motionTemplateVars.judge || 'Not specified'"></span>
+                                    </template>
+                                    <template x-if="editingField === 'judge'">
+                                        <input type="text" x-model="editingValue" @keydown.enter="saveInlineEdit('judge')" @keydown.escape="cancelInlineEdit()" class="form-input" style="padding: 0.25rem 0.5rem; font-size: 0.875rem;" placeholder="Hon. John Smith">
+                                    </template>
+                                    <template x-if="editingField !== 'judge'">
+                                        <button @click="startInlineEdit('judge', motionTemplateVars.judge)" class="edit-icon-btn" title="Edit">&#9998;</button>
+                                    </template>
+                                    <template x-if="editingField === 'judge'">
+                                        <div style="display: flex; gap: 0.25rem;">
+                                            <button @click="saveInlineEdit('judge')" class="edit-icon-btn" style="color: #16a34a;" title="Save">&#10003;</button>
+                                            <button @click="cancelInlineEdit()" class="edit-icon-btn" style="color: #dc2626;" title="Cancel">&#10005;</button>
+                                        </div>
+                                    </template>
+                                </div>
+                                <!-- Magistrate Judge -->
+                                <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr auto; gap: 0.5rem; align-items: center;">
+                                    <span style="color: var(--gray-500); font-size: 0.875rem;">Magistrate Judge:</span>
+                                    <template x-if="editingField !== 'mag_judge'">
+                                        <span style="font-weight: 500;" :style="!motionTemplateVars.mag_judge ? 'color: var(--gray-400);' : ''" x-text="motionTemplateVars.mag_judge || 'Not specified'"></span>
+                                    </template>
+                                    <template x-if="editingField === 'mag_judge'">
+                                        <input type="text" x-model="editingValue" @keydown.enter="saveInlineEdit('mag_judge')" @keydown.escape="cancelInlineEdit()" class="form-input" style="padding: 0.25rem 0.5rem; font-size: 0.875rem;" placeholder="Hon. Jane Doe">
+                                    </template>
+                                    <template x-if="editingField !== 'mag_judge'">
+                                        <button @click="startInlineEdit('mag_judge', motionTemplateVars.mag_judge)" class="edit-icon-btn" title="Edit">&#9998;</button>
+                                    </template>
+                                    <template x-if="editingField === 'mag_judge'">
+                                        <div style="display: flex; gap: 0.25rem;">
+                                            <button @click="saveInlineEdit('mag_judge')" class="edit-icon-btn" style="color: #16a34a;" title="Save">&#10003;</button>
+                                            <button @click="cancelInlineEdit()" class="edit-icon-btn" style="color: #dc2626;" title="Cancel">&#10005;</button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Signing Attorney Section -->
+                        <div style="background: #e8f4fd; border: 1px solid #3b82f6; border-radius: 8px; padding: 1rem;">
+                            <h4 style="margin: 0 0 1rem 0; color: #1e40af; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">Signing Attorney</h4>
+                            <template x-if="currentUser">
+                                <div style="display: grid; gap: 0.75rem;">
+                                    <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem;">
+                                        <span style="color: var(--gray-500); font-size: 0.875rem;">Name:</span>
+                                        <span style="font-weight: 500;" x-text="currentUser.name"></span>
+                                    </div>
+                                    <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem;">
+                                        <span style="color: var(--gray-500); font-size: 0.875rem;">Bar Number:</span>
+                                        <span style="font-weight: 500;" x-text="currentUser.bar_number"></span>
+                                    </div>
+                                    <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem;">
+                                        <span style="color: var(--gray-500); font-size: 0.875rem;">Email:</span>
+                                        <span style="font-weight: 500;" x-text="currentUser.email"></span>
+                                    </div>
+                                </div>
+                            </template>
+                            <template x-if="!currentUser">
+                                <p style="color: #b45309; margin: 0;">
+                                    Please sign in to generate documents. <a href="#" @click.prevent="showUserDropdown = true" style="color: #3b82f6;">Sign in now</a>
+                                </p>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Inline edit error -->
+                    <div x-show="inlineEditError" class="alert alert-error" style="margin-bottom: 1rem;" x-text="inlineEditError"></div>
+
+                    <!-- Actions -->
+                    <div class="actions-bar">
+                        <button class="btn btn-secondary" @click="clearMotion()">Upload Different Motion</button>
+                        <button class="btn btn-success"
+                                @click="generateOpposition()"
+                                :disabled="motionGenerating || !currentUser || !canGenerateOpposition()"
+                                :title="!currentUser ? 'Please sign in first' : (!canGenerateOpposition() ? 'Missing: ' + getMissingRequiredFields().join(', ') : 'Generate opposition document')"
+                                style="font-size: 1rem; padding: 0.75rem 1.5rem;">
+                            <template x-if="!motionGenerating">
+                                <span>Generate Opposition</span>
+                            </template>
+                            <template x-if="motionGenerating">
+                                <span class="loading" style="padding: 0;">
+                                    <span class="spinner"></span>
+                                    Generating...
+                                </span>
+                            </template>
+                        </button>
+                    </div>
                 </div>
             </div><!-- End Motion Opposition Page -->
 
@@ -708,11 +941,18 @@
                 objections: [],
 
                 // Motion Opposition state
+                motionStep: 'upload',  // 'upload' or 'review'
                 motionDragging: false,
                 motionUploading: false,
+                motionGenerating: false,
                 motionError: null,
-                motionInfo: null,
+                motionSessionId: null,
                 motionFilename: null,
+                motionTemplateVars: {},
+                // Inline editing state
+                editingField: null,
+                editingValue: '',
+                inlineEditError: null,
 
                 // Objections Management state
                 managedObjections: [],
@@ -1053,13 +1293,13 @@
                 async uploadMotion(file) {
                     this.motionUploading = true;
                     this.motionError = null;
-                    this.motionInfo = null;
-                    this.motionFilename = null;
 
                     try {
                         const data = await API.uploadMotion(file);
-                        this.motionInfo = data.motion_info;
+                        this.motionSessionId = data.session_id;
                         this.motionFilename = data.filename;
+                        this.motionTemplateVars = data.template_vars;
+                        this.motionStep = 'review';
                     } catch (e) {
                         this.motionError = e.message;
                     } finally {
@@ -1068,9 +1308,139 @@
                 },
 
                 clearMotion() {
-                    this.motionInfo = null;
+                    this.motionStep = 'upload';
+                    this.motionSessionId = null;
                     this.motionFilename = null;
+                    this.motionTemplateVars = {};
                     this.motionError = null;
+                    this.editingField = null;
+                    this.editingValue = '';
+                    this.inlineEditError = null;
+                },
+
+                canGenerateOpposition() {
+                    const v = this.motionTemplateVars;
+                    return v.court_name && v.case_number && v.pltCaption && v.defCaption && v.document_title && v.filename;
+                },
+
+                getMissingRequiredFields() {
+                    const v = this.motionTemplateVars;
+                    const missing = [];
+                    if (!v.court_name) missing.push('Court');
+                    if (!v.case_number) missing.push('Case Number');
+                    if (!v.pltCaption) missing.push('Plaintiff(s)');
+                    if (!v.defCaption) missing.push('Defendant(s)');
+                    if (!v.document_title) missing.push('Document Title');
+                    if (!v.filename) missing.push('Filename');
+                    return missing;
+                },
+
+                // Inline editing methods
+                startInlineEdit(field, currentValue) {
+                    this.editingField = field;
+                    this.editingValue = currentValue || '';
+                    this.inlineEditError = null;
+                },
+
+                cancelInlineEdit() {
+                    this.editingField = null;
+                    this.editingValue = '';
+                    this.inlineEditError = null;
+                },
+
+                async saveInlineEdit(field) {
+                    const requiredFields = ['court_name', 'case_number', 'pltCaption', 'defCaption', 'document_title', 'filename'];
+                    const labels = {
+                        court_name: 'Court',
+                        case_number: 'Case Number',
+                        pltCaption: 'Plaintiff(s)',
+                        defCaption: 'Defendant(s)',
+                        document_title: 'Document Title',
+                        filename: 'Filename'
+                    };
+
+                    // Validate required fields
+                    if (requiredFields.includes(field) && !this.editingValue.trim()) {
+                        this.inlineEditError = `${labels[field]} is required`;
+                        return;
+                    }
+
+                    this.inlineEditError = null;
+
+                    try {
+                        // Update local state
+                        const updatedVars = { ...this.motionTemplateVars };
+                        updatedVars[field] = this.editingValue;
+
+                        // Sync multiple_plt with multiple_plaintiffs
+                        if (field === 'multiple_plaintiffs') {
+                            updatedVars.multiple_plt = updatedVars.multiple_plaintiffs;
+                        }
+
+                        // Save to server
+                        await API.updateMotionSession(this.motionSessionId, updatedVars);
+                        this.motionTemplateVars = updatedVars;
+                        this.cancelInlineEdit();
+                    } catch (e) {
+                        this.inlineEditError = e.message;
+                    }
+                },
+
+                async toggleBooleanField(field) {
+                    this.inlineEditError = null;
+
+                    try {
+                        const updatedVars = { ...this.motionTemplateVars };
+                        updatedVars[field] = !updatedVars[field];
+
+                        // Sync multiple_plt with multiple_plaintiffs
+                        if (field === 'multiple_plaintiffs') {
+                            updatedVars.multiple_plt = updatedVars.multiple_plaintiffs;
+                        }
+
+                        await API.updateMotionSession(this.motionSessionId, updatedVars);
+                        this.motionTemplateVars = updatedVars;
+                    } catch (e) {
+                        this.inlineEditError = e.message;
+                    }
+                },
+
+                async generateOpposition() {
+                    if (!this.currentUser) {
+                        this.motionError = 'Please sign in to generate documents';
+                        return;
+                    }
+
+                    const missingFields = this.getMissingRequiredFields();
+                    if (missingFields.length > 0) {
+                        this.motionError = `Missing required fields: ${missingFields.join(', ')}`;
+                        return;
+                    }
+
+                    this.motionGenerating = true;
+                    this.motionError = null;
+
+                    try {
+                        const { blob, filename } = await API.generateOpposition(this.motionSessionId, {
+                            associate_name: this.currentUser.name,
+                            associate_bar: this.currentUser.bar_number,
+                            associate_email: this.currentUser.email
+                        });
+
+                        // Download the file
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                    } catch (e) {
+                        this.motionError = e.message;
+                    } finally {
+                        this.motionGenerating = false;
+                    }
                 },
 
                 // Page navigation

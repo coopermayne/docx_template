@@ -204,7 +204,7 @@ class ClaudeService:
                 },
                 "court_name": {
                     "type": "string",
-                    "description": "Full name of the court (e.g., 'United States District Court, Central District of California')"
+                    "description": "Full name of the court in ALL CAPS with newline (\\n) between parts, NO COMMAS. Example: 'UNITED STATES DISTRICT COURT\\nCENTRAL DISTRICT OF CALIFORNIA'"
                 },
                 "judge_name": {
                     "type": "string",
@@ -247,9 +247,13 @@ class ClaudeService:
                 "moving_party": {
                     "type": "string",
                     "description": "The party who filed/authored this motion (e.g., 'Defendant Acme Corp', 'Plaintiff John Smith')"
+                },
+                "filename": {
+                    "type": "string",
+                    "description": "Generated filename for the opposition document using standard legal abbreviations (e.g., '2025.01.15 Opp MTD', '2025.01.15 Opp MSJ')"
                 }
             },
-            "required": ["motion_title", "case_number", "court_name", "judge_name", "magistrate_judge_name", "hearing_date", "hearing_time", "hearing_location", "plaintiffs", "defendants", "multiple_plaintiffs", "multiple_defendants", "moving_party"]
+            "required": ["motion_title", "case_number", "court_name", "judge_name", "magistrate_judge_name", "hearing_date", "hearing_time", "hearing_location", "plaintiffs", "defendants", "multiple_plaintiffs", "multiple_defendants", "moving_party", "filename"]
         }
     }
 
@@ -485,41 +489,103 @@ Call the submit_case_info tool with the extracted information.
         if not self.is_available():
             return self._fallback_extract_motion_info(two_page_text)
 
+        from datetime import datetime
+        today_date = datetime.now().strftime('%Y.%m.%d')
+
         prompt = f"""You are a legal assistant extracting information from a motion document filed in court.
 
 ## Document Text (first two pages):
 {two_page_text}
 
 ## Instructions:
-Extract the following information from the motion document:
+Extract the following information from the motion document. IMPORTANT: If you cannot confidently determine a field's value, leave it as an empty string. Do not guess.
 
-1. **motion_title**: The title/name of the motion (e.g., "Motion to Compel Discovery", "Motion for Summary Judgment", "Motion to Dismiss")
+1. **motion_title**: The title/name of the motion (e.g., "Motion to Compel Discovery", "Motion for Summary Judgment"). Leave empty if not found.
 
-2. **case_number**: The case number exactly as it appears (e.g., "2:24-cv-01234-ABC-XYZ", "BC123456")
+2. **case_number**: The case number exactly as it appears (e.g., "2:24-cv-01234-ABC-XYZ", "BC123456"). Leave empty if not found.
 
-3. **court_name**: The full name of the court (e.g., "United States District Court, Central District of California")
+3. **court_name**: The full name of the court in ALL CAPS with a newline between parts. NO COMMAS. Format example:
+   "UNITED STATES DISTRICT COURT\nCENTRAL DISTRICT OF CALIFORNIA"
+   or "SUPERIOR COURT OF CALIFORNIA\nCOUNTY OF LOS ANGELES"
+   Use \\n for the line break. Leave empty if not found.
 
-4. **judge_name**: The presiding judge's name if listed (e.g., "Hon. John Smith"). Use empty string if not found.
+4. **judge_name**: The presiding district judge. Federal case numbers often contain judge initials (e.g., "2:24-cv-01234-DOC" where "DOC" = Judge David O. Carter). Use your knowledge of federal judges in the identified district to determine the judge's last name. Format as "Judge [LastName]" (e.g., "Judge Carter", "Judge Wright"). ONLY provide if you can confidently identify the actual judge. Leave empty if uncertain.
 
-5. **magistrate_judge_name**: The magistrate judge's name if listed (e.g., "Hon. Jane Doe"). Use empty string if not found.
+5. **magistrate_judge_name**: The magistrate judge. Federal case numbers may include magistrate initials after the district judge (e.g., "2:24-cv-01234-DOC-JPR" where "JPR" = Magistrate Judge Jean P. Rosenbluth). Use your knowledge of magistrate judges in the identified district. Format as "Magistrate Judge [LastName]" (e.g., "Magistrate Judge Rosenbluth"). ONLY provide if you can confidently identify the actual magistrate judge. Leave empty if uncertain.
 
-6. **hearing_date**: The scheduled hearing date (e.g., "January 15, 2025"). Use empty string if not specified.
+6. **hearing_date**: The scheduled hearing date (e.g., "January 15, 2025"). Leave empty if not specified.
 
-7. **hearing_time**: The scheduled hearing time (e.g., "9:00 a.m."). Use empty string if not specified.
+7. **hearing_time**: The scheduled hearing time (e.g., "9:00 a.m."). Leave empty if not specified.
 
-8. **hearing_location**: The courtroom/location for the hearing (e.g., "Courtroom 5A, 255 E Temple St, Los Angeles, CA"). Use empty string if not specified.
+8. **hearing_location**: The courtroom/location for the hearing. Leave empty if not specified.
 
-9. **plaintiffs**: Extract ALL plaintiff names from the case caption as an array. Include "et al." parties if mentioned.
+9. **plaintiffs**: Extract ALL plaintiff names from the case caption as an array. Include "et al." if mentioned. Leave as empty array if not found.
 
-10. **defendants**: Extract ALL defendant names from the case caption as an array. Include "et al." parties if mentioned.
+10. **defendants**: Extract ALL defendant names from the case caption as an array. Include "et al." if mentioned. Leave as empty array if not found.
 
 11. **multiple_plaintiffs**: True if there is more than one plaintiff, false otherwise.
 
 12. **multiple_defendants**: True if there is more than one defendant, false otherwise.
 
-13. **moving_party**: The party who filed/authored this motion. Look at who signed the motion or whose counsel prepared it. Format as "Defendant [Name]" or "Plaintiff [Name]" (e.g., "Defendant Acme Corp", "Plaintiffs John and Jane Doe").
+13. **moving_party**: The party who filed this motion based on who signed it or whose counsel prepared it. Format as "Defendant [Name]" or "Plaintiff [Name]". Leave empty if not determinable.
 
-If any field cannot be determined from the document, provide your best guess or use an empty string/empty array/false as appropriate.
+14. **filename**: Generate a filename for the opposition document using today's date ({today_date}) and standard legal abbreviations.
+
+## Filename Generation Rules:
+- Format: [date] Opp [motion abbreviation]
+- Date format: yyyy.mm.dd (today is {today_date})
+- Do NOT use periods in abbreviations (use "Ans" not "Ans.")
+- Do NOT include the case name (file will be in the case folder)
+- Use plural forms when appropriate (Defs for multiple defendants, Plts for multiple plaintiffs)
+
+## Standard Abbreviations:
+| Term | Abbreviation |
+|------|--------------|
+| Complaint | Compl |
+| Answer | Ans |
+| First Amended Complaint | FAC |
+| Second Amended Complaint | SAC |
+| Opposition | Opp |
+| Motion | Mot |
+| Motion to Dismiss | MTD |
+| Motion for Summary Judgment | MSJ |
+| Reply | Reply |
+| Declaration | Decl |
+| Memorandum | Memo |
+| Request | Req |
+| Statement of Facts | SOF |
+| Response | Resp |
+| Notice | Not |
+| Exhibit(s) | Exh |
+| Stipulation | Stip |
+| Certificate of Service | COS |
+| Supplemental | Supp |
+| Joint Status Report | JSR |
+| Case Management Statement | CMS |
+| Discovery | Disc |
+| Interrogatories | ROG |
+| Request for Production | RFP |
+| Request for Admission | RFA |
+| Defendant | Def |
+| Defendants | Defs |
+| Plaintiff | Plt |
+| Plaintiffs | Plts |
+| Proposed Order | PO |
+| Deposition | Depo |
+| In Support Of | ISO |
+| Order to Show Cause | OSC |
+| Motion in Limine | MIL |
+| Motion to Compel | Mot to Compel |
+
+## Filename Examples:
+- Opposition to Motion to Dismiss → "{today_date} Opp MTD"
+- Opposition to Motion for Summary Judgment → "{today_date} Opp MSJ"
+- Opposition to Motion to Compel Discovery → "{today_date} Opp Mot to Compel Disc"
+- Opposition to Motion to Compel Arbitration → "{today_date} Opp Mot to Compel Arb"
+- Opposition to Motion in Limine → "{today_date} Opp MIL"
+- Opposition to Defendant's Motion to Strike → "{today_date} Opp Def Mot to Strike"
+
+CRITICAL: Only provide information you can extract from the document or confidently determine from your knowledge. Leave fields as empty strings rather than guessing.
 
 Call the submit_motion_info tool with the extracted information.
 """
@@ -553,7 +619,8 @@ Call the submit_motion_info tool with the extracted information.
                         "defendants": result.get("defendants", []),
                         "multiple_plaintiffs": result.get("multiple_plaintiffs", False),
                         "multiple_defendants": result.get("multiple_defendants", False),
-                        "moving_party": result.get("moving_party", "")
+                        "moving_party": result.get("moving_party", ""),
+                        "filename": result.get("filename", "")
                     }
 
             # Fallback if no tool use found
@@ -566,6 +633,9 @@ Call the submit_motion_info tool with the extracted information.
     def _fallback_extract_motion_info(self, text: str) -> Dict[str, Any]:
         """Fallback extraction for motion info when Claude is unavailable."""
         import re
+
+        from datetime import datetime
+        today_date = datetime.now().strftime('%Y.%m.%d')
 
         result = {
             "motion_title": "",
@@ -580,7 +650,8 @@ Call the submit_motion_info tool with the extracted information.
             "defendants": [],
             "multiple_plaintiffs": False,
             "multiple_defendants": False,
-            "moving_party": ""
+            "moving_party": "",
+            "filename": f"{today_date} Opp"
         }
 
         text_upper = text.upper()
