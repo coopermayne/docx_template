@@ -13,6 +13,7 @@ class DocumentGenerator:
 
     def __init__(self):
         self.template_dir = Config.WORD_TEMPLATE_FOLDER
+        self._uploaded_template_path = None  # Track for cleanup
 
     def generate_response(
         self,
@@ -153,14 +154,23 @@ class DocumentGenerator:
 
             context['requests'].append(request_data)
 
-        # Check for the firm template first, then fallback to default
-        template_path = os.path.join(self.template_dir, 'rfp_template.docx')
+        # Try to get uploaded template from Supabase first
+        template_path = None
+        try:
+            from api.templates import get_latest_template_path
+            self._uploaded_template_path = get_latest_template_path('rfp')
+            if self._uploaded_template_path:
+                template_path = self._uploaded_template_path
+        except Exception:
+            pass
 
-        if not os.path.exists(template_path):
-            # Fallback to generic template name
-            template_path = os.path.join(self.template_dir, 'rfp_response.docx')
+        # Fall back to local templates
+        if not template_path:
+            template_path = os.path.join(self.template_dir, 'rfp_template.docx')
+            if not os.path.exists(template_path):
+                template_path = os.path.join(self.template_dir, 'rfp_response.docx')
 
-        if os.path.exists(template_path):
+        if template_path and os.path.exists(template_path):
             doc = DocxTemplate(template_path)
             doc.render(context)
         else:
@@ -171,6 +181,14 @@ class DocumentGenerator:
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.docx')
         doc.save(temp_file.name)
         temp_file.close()
+
+        # Clean up uploaded template if used
+        if self._uploaded_template_path:
+            try:
+                os.unlink(self._uploaded_template_path)
+            except (OSError, FileNotFoundError):
+                pass
+            self._uploaded_template_path = None
 
         return temp_file.name
 

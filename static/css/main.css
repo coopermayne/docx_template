@@ -812,3 +812,79 @@ textarea.form-input {
     color: var(--primary-color);
     background-color: var(--gray-100);
 }
+
+/* Template Type Badge */
+.template-type-badge {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 9999px;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.template-type-badge.type-rfp {
+    background-color: #dbeafe;
+    color: #1e40af;
+}
+
+.template-type-badge.type-opposition {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+/* Template Tiles */
+.template-tile {
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 10px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.template-tile:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.template-tile-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.template-tile-actions {
+    display: flex;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--gray-100);
+}
+
+.template-upload-tile {
+    border: 2px dashed var(--gray-300);
+    background: var(--gray-50);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100px;
+    transition: border-color 0.15s, background-color 0.15s;
+}
+
+.template-upload-tile:hover {
+    border-color: var(--primary-color);
+    background: #eff6ff;
+}
+
+.template-upload-tile.dragover {
+    border-color: var(--primary-color);
+    background: #dbeafe;
+}
+
+.template-upload-tile.disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}

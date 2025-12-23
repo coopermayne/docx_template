@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RFP Response Tool</title>
+    <title>Legal Document Tools</title>
     <link rel="stylesheet" href="/static/css/main.css">
     <script defer src="/static/vendor/alpine.min.js"></script>
     <script src="/static/js/api.js"></script>
@@ -13,7 +13,9 @@
         <!-- Header -->
         <header>
             <div class="container" style="display: flex; justify-content: space-between; align-items: center;">
-                <h1 style="margin: 0;">Legal RFP Response Tool</h1>
+                <a href="#home" @click.prevent="navigateTo('home')" style="text-decoration: none; color: inherit;">
+                    <h1 style="margin: 0;">Legal Document Tools</h1>
+                </a>
                 <nav class="header-nav">
                     <a class="nav-btn" :class="{ 'active': currentPage === 'rfp' }" href="#rfp" @click="navigateTo('rfp')">
                         RFP Tool
@@ -63,8 +65,149 @@
         </header>
 
         <main class="container">
+            <!-- Home Page -->
+            <div x-show="currentPage === 'home'">
+                <div class="home-hero" style="text-align: center; padding: 3rem 1rem; margin-bottom: 2rem;">
+                    <h2 style="font-size: 2.25rem; font-weight: 700; color: var(--gray-900); margin-bottom: 1rem;">
+                        AI-Powered Legal Document Generation
+                    </h2>
+                    <p style="font-size: 1.125rem; color: var(--gray-600); max-width: 600px; margin: 0 auto;">
+                        Streamline your legal document workflows with intelligent tools that help you draft responses,
+                        oppositions, and more in a fraction of the time.
+                    </p>
+                </div>
+
+                <!-- Feature Cards -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 3rem;">
+                    <!-- RFP Tool Card -->
+                    <div class="card feature-card" style="cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;"
+                         @click="navigateTo('rfp')"
+                         @mouseenter="$el.style.transform = 'translateY(-4px)'; $el.style.boxShadow = '0 12px 24px rgba(0,0,0,0.1)'"
+                         @mouseleave="$el.style.transform = ''; $el.style.boxShadow = ''">
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                            <div style="width: 48px; height: 48px; background: #dbeafe; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                                📋
+                            </div>
+                            <h3 style="margin: 0; font-size: 1.25rem; color: var(--gray-900);">RFP Response Tool</h3>
+                        </div>
+                        <p style="color: var(--gray-600); margin: 0 0 1rem 0; line-height: 1.6;">
+                            Upload a Request for Production PDF and let AI analyze each request, suggest objections,
+                            and match responsive documents. Generate professionally formatted Word documents.
+                        </p>
+                        <span style="color: var(--primary); font-weight: 500; display: flex; align-items: center; gap: 0.5rem;">
+                            Get Started <span style="font-size: 1.2em;">→</span>
+                        </span>
+                    </div>
+
+                    <!-- Motion Opposition Card -->
+                    <div class="card feature-card" style="cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;"
+                         @click="navigateTo('motion_opposition')"
+                         @mouseenter="$el.style.transform = 'translateY(-4px)'; $el.style.boxShadow = '0 12px 24px rgba(0,0,0,0.1)'"
+                         @mouseleave="$el.style.transform = ''; $el.style.boxShadow = ''">
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                            <div style="width: 48px; height: 48px; background: #fef3c7; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                                ⚖️
+                            </div>
+                            <h3 style="margin: 0; font-size: 1.25rem; color: var(--gray-900);">Motion Opposition</h3>
+                        </div>
+                        <p style="color: var(--gray-600); margin: 0 0 1rem 0; line-height: 1.6;">
+                            Upload a motion PDF and automatically extract case information. Review and edit details,
+                            then generate a formatted opposition document ready for filing.
+                        </p>
+                        <span style="color: var(--primary); font-weight: 500; display: flex; align-items: center; gap: 0.5rem;">
+                            Get Started <span style="font-size: 1.2em;">→</span>
+                        </span>
+                    </div>
+
+                    <!-- Templates Card -->
+                    <div class="card feature-card" style="cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;"
+                         @click="navigateTo('templates')"
+                         @mouseenter="$el.style.transform = 'translateY(-4px)'; $el.style.boxShadow = '0 12px 24px rgba(0,0,0,0.1)'"
+                         @mouseleave="$el.style.transform = ''; $el.style.boxShadow = ''">
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                            <div style="width: 48px; height: 48px; background: #d1fae5; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                                📄
+                            </div>
+                            <h3 style="margin: 0; font-size: 1.25rem; color: var(--gray-900);">Manage Templates</h3>
+                        </div>
+                        <p style="color: var(--gray-600); margin: 0 0 1rem 0; line-height: 1.6;">
+                            Upload and manage your Word document templates. Customize the output format for RFP responses,
+                            oppositions, and other document types.
+                        </p>
+                        <span style="color: var(--primary); font-weight: 500; display: flex; align-items: center; gap: 0.5rem;">
+                            Manage Templates <span style="font-size: 1.2em;">→</span>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Coming Soon Section -->
+                <div style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-radius: 16px; padding: 2rem; margin-bottom: 2rem;">
+                    <h3 style="margin: 0 0 1rem 0; color: var(--gray-800); font-size: 1.25rem;">
+                        Coming Soon
+                    </h3>
+                    <p style="color: var(--gray-600); margin-bottom: 1.5rem;">
+                        We're actively developing new tools to help streamline more of your legal document workflows:
+                    </p>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                        <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: white; border-radius: 8px; border: 1px solid var(--gray-200);">
+                            <span style="font-size: 1.25rem;">📝</span>
+                            <div>
+                                <div style="font-weight: 500; color: var(--gray-800);">Retainer Agreements</div>
+                                <div style="font-size: 0.875rem; color: var(--gray-500);">Client engagement letters</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: white; border-radius: 8px; border: 1px solid var(--gray-200);">
+                            <span style="font-size: 1.25rem;">📜</span>
+                            <div>
+                                <div style="font-weight: 500; color: var(--gray-800);">Complaint Drafting</div>
+                                <div style="font-size: 0.875rem; color: var(--gray-500);">Initial pleadings</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: white; border-radius: 8px; border: 1px solid var(--gray-200);">
+                            <span style="font-size: 1.25rem;">✍️</span>
+                            <div>
+                                <div style="font-weight: 500; color: var(--gray-800);">Declarations</div>
+                                <div style="font-size: 0.875rem; color: var(--gray-500);">Witness statements</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: white; border-radius: 8px; border: 1px solid var(--gray-200);">
+                            <span style="font-size: 1.25rem;">🔍</span>
+                            <div>
+                                <div style="font-weight: 500; color: var(--gray-800);">Discovery Requests</div>
+                                <div style="font-size: 0.875rem; color: var(--gray-500);">Interrogatories & RFAs</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div><!-- End Home Page -->
+
             <!-- RFP Tool Page -->
             <div x-show="currentPage === 'rfp'">
+
+            <!-- How It Works Banner -->
+            <div x-show="!rfpHelpDismissed" class="help-banner" style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border: 1px solid #bfdbfe; border-radius: 12px; padding: 1.25rem; margin-top: 1.5rem; margin-bottom: 1.5rem; position: relative;">
+                <button @click="rfpHelpDismissed = true" style="position: absolute; top: 0.75rem; right: 0.75rem; background: none; border: none; cursor: pointer; color: var(--gray-400); font-size: 1.25rem; line-height: 1;" title="Dismiss">&times;</button>
+                <h3 style="margin: 0 0 0.75rem 0; font-size: 1rem; color: #1e40af; display: flex; align-items: center; gap: 0.5rem;">
+                    <span>💡</span> How This Tool Works
+                </h3>
+                <ul style="margin: 0; padding-left: 1.25rem; color: var(--gray-700); font-size: 0.9rem; line-height: 1.7;">
+                    <li><strong>Upload</strong> your RFP PDF — requests are automatically extracted</li>
+                    <li><strong>Add documents</strong> you plan to produce (optional) — Bates numbers detected from filenames</li>
+                    <li><strong>AI suggests</strong> appropriate objections using preset language — review and adjust selections</li>
+                    <li><strong>Generate</strong> a professionally formatted Word document ready for filing</li>
+                </ul>
+                <p style="margin: 0.75rem 0 0 0; font-size: 0.85rem; color: var(--gray-500);">
+                    Customize your objection templates via <a href="#" @click.prevent="switchPage('objections')" style="color: #2563eb; font-weight: 500;">Manage Objections</a>
+                </p>
+            </div>
+
+            <!-- RFP Toolbar -->
+            <div style="display: flex; justify-content: flex-start; align-items: center; margin-top: 1.5rem; margin-bottom: 1.5rem;">
+                <button class="btn btn-secondary" style="display: flex; align-items: center; gap: 0.5rem;" @click="switchPage('objections')">
+                    <span style="font-size: 1.1em;">⚙️</span> Manage Objections
+                </button>
+            </div>
+
             <!-- Steps Indicator -->
             <ul class="steps">
                 <li class="step"
@@ -92,13 +235,6 @@
                     <span class="step-label">Generate</span>
                 </li>
             </ul>
-
-            <!-- RFP Toolbar -->
-            <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
-                <button class="btn btn-secondary" style="font-size: 0.875rem;" @click="switchPage('objections')">
-                    Manage Objections
-                </button>
-            </div>
 
             <!-- Error Alert -->
             <div x-show="error" class="alert alert-error" x-text="error"></div>
@@ -790,19 +926,10 @@
 
             <!-- Manage Templates Page -->
             <div x-show="currentPage === 'templates'">
-                <div class="card">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                        <h2 class="card-title" style="margin: 0;">Manage Templates</h2>
-                        <template x-if="currentUser">
-                            <button class="btn btn-primary" @click="$refs.templateInput.click()" :disabled="templateUploading">
-                                <span x-show="!templateUploading">+ Upload Template</span>
-                                <span x-show="templateUploading" class="loading"><span class="spinner"></span> Uploading...</span>
-                            </button>
-                        </template>
-                    </div>
-
-                    <p style="color: var(--gray-600); margin-bottom: 1.5rem;">
-                        Upload and manage Word document templates (.docx) used for generating legal documents.
+                <div style="margin-top: 1.5rem;">
+                    <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--gray-900); margin-bottom: 0.5rem;">Manage Templates</h2>
+                    <p style="color: var(--gray-600); margin-bottom: 2rem;">
+                        Upload and manage Word document templates. The most recent template of each type will be used when generating documents.
                     </p>
 
                     <!-- Sign in prompt -->
@@ -813,52 +940,110 @@
                     </template>
 
                     <!-- Error Alert -->
-                    <div x-show="templatesError" class="alert alert-error" x-text="templatesError"></div>
+                    <div x-show="templatesError" class="alert alert-error" style="margin-bottom: 1.5rem;" x-text="templatesError"></div>
 
-                    <!-- Upload input (hidden) -->
+                    <!-- Hidden file input -->
                     <input type="file"
                            x-ref="templateInput"
                            accept=".docx"
                            style="display: none"
-                           @change="handleTemplateUpload($event)">
+                           @change="handleTemplateFileSelect($event)">
 
                     <!-- Loading state -->
                     <div x-show="templatesLoading" style="text-align: center; padding: 2rem;">
                         <span class="loading"><span class="spinner"></span> Loading templates...</span>
                     </div>
 
-                    <!-- Templates List -->
-                    <div x-show="!templatesLoading && templates.length > 0" class="objections-list">
-                        <template x-for="template in templates" :key="template.id">
-                            <div class="objection-item">
-                                <div class="objection-item-header">
-                                    <div class="objection-item-title" style="display: flex; align-items: center; gap: 0.75rem;">
-                                        <span style="font-size: 1.5rem;">📄</span>
-                                        <div>
-                                            <strong x-text="template.name"></strong>
-                                            <div style="font-size: 0.875rem; color: var(--gray-500);">
-                                                Uploaded by <span x-text="template.uploaded_by_name || 'Unknown'"></span>
-                                                <span x-show="template.created_at"> · <span x-text="formatDate(template.created_at)"></span></span>
+                    <div x-show="!templatesLoading">
+                        <!-- RFP Templates Section -->
+                        <div class="template-section" style="margin-bottom: 2.5rem;">
+                            <h3 style="font-size: 1.125rem; font-weight: 600; color: var(--gray-800); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <span style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: #dbeafe; border-radius: 6px;">📋</span>
+                                RFP Response Templates
+                            </h3>
+                            <div class="template-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+                                <!-- Existing RFP templates -->
+                                <template x-for="template in templates.filter(t => t.type === 'rfp')" :key="template.id">
+                                    <div class="template-tile">
+                                        <div class="template-tile-header">
+                                            <span style="font-size: 1.5rem;">📄</span>
+                                            <div style="flex: 1; min-width: 0;">
+                                                <div style="font-weight: 500; color: var(--gray-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" x-text="template.name"></div>
+                                                <div style="font-size: 0.75rem; color: var(--gray-500);">
+                                                    <span x-text="getInitials(template.uploaded_by_name)"></span> · <span x-text="formatDate(template.created_at)"></span>
+                                                </div>
                                             </div>
                                         </div>
+                                        <div class="template-tile-actions" x-show="currentUser">
+                                            <button class="btn btn-sm btn-secondary" @click="downloadTemplate(template)">Download</button>
+                                            <button class="btn btn-sm btn-danger" @click="confirmDeleteTemplate(template)">Delete</button>
+                                        </div>
                                     </div>
-                                    <div class="objection-item-actions" x-show="currentUser">
-                                        <button class="btn btn-sm btn-secondary" @click="downloadTemplate(template)">Download</button>
-                                        <button class="btn btn-sm btn-danger" @click="confirmDeleteTemplate(template)">Delete</button>
-                                    </div>
-                                </div>
-                                <div class="objection-item-body" x-show="template.description">
-                                    <div class="objection-field">
-                                        <label>Description:</label>
-                                        <p x-text="template.description"></p>
+                                </template>
+
+                                <!-- Upload dropzone tile for RFP -->
+                                <div class="template-tile template-upload-tile"
+                                     :class="{ 'dragover': rfpDragging, 'disabled': !currentUser }"
+                                     x-show="currentUser"
+                                     @click="templateUploadType = 'rfp'; $refs.templateInput.click()"
+                                     @dragover.prevent="rfpDragging = true"
+                                     @dragleave.prevent="rfpDragging = false"
+                                     @drop.prevent="handleTemplateDropForType($event, 'rfp')">
+                                    <div style="text-align: center; color: var(--gray-400);">
+                                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">+</div>
+                                        <div style="font-size: 0.875rem;" x-text="rfpUploading ? 'Uploading...' : 'Drop or click to upload'"></div>
                                     </div>
                                 </div>
                             </div>
-                        </template>
-                    </div>
+                            <div x-show="templates.filter(t => t.type === 'rfp').length === 0 && !currentUser" style="color: var(--gray-500); font-size: 0.875rem; padding: 1rem; background: var(--gray-50); border-radius: 8px; text-align: center;">
+                                No RFP templates uploaded yet.
+                            </div>
+                        </div>
 
-                    <div x-show="!templatesLoading && templates.length === 0" style="text-align: center; padding: 2rem; color: var(--gray-500);">
-                        No templates uploaded yet. Click "Upload Template" to add one.
+                        <!-- Opposition Templates Section -->
+                        <div class="template-section">
+                            <h3 style="font-size: 1.125rem; font-weight: 600; color: var(--gray-800); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <span style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: #fef3c7; border-radius: 6px;">⚖️</span>
+                                Motion Opposition Templates
+                            </h3>
+                            <div class="template-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+                                <!-- Existing Opposition templates -->
+                                <template x-for="template in templates.filter(t => t.type === 'opposition')" :key="template.id">
+                                    <div class="template-tile">
+                                        <div class="template-tile-header">
+                                            <span style="font-size: 1.5rem;">📄</span>
+                                            <div style="flex: 1; min-width: 0;">
+                                                <div style="font-weight: 500; color: var(--gray-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" x-text="template.name"></div>
+                                                <div style="font-size: 0.75rem; color: var(--gray-500);">
+                                                    <span x-text="getInitials(template.uploaded_by_name)"></span> · <span x-text="formatDate(template.created_at)"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="template-tile-actions" x-show="currentUser">
+                                            <button class="btn btn-sm btn-secondary" @click="downloadTemplate(template)">Download</button>
+                                            <button class="btn btn-sm btn-danger" @click="confirmDeleteTemplate(template)">Delete</button>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- Upload dropzone tile for Opposition -->
+                                <div class="template-tile template-upload-tile"
+                                     :class="{ 'dragover': oppositionDragging, 'disabled': !currentUser }"
+                                     x-show="currentUser"
+                                     @click="templateUploadType = 'opposition'; $refs.templateInput.click()"
+                                     @dragover.prevent="oppositionDragging = true"
+                                     @dragleave.prevent="oppositionDragging = false"
+                                     @drop.prevent="handleTemplateDropForType($event, 'opposition')">
+                                    <div style="text-align: center; color: var(--gray-400);">
+                                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">+</div>
+                                        <div style="font-size: 0.875rem;" x-text="oppositionUploading ? 'Uploading...' : 'Drop or click to upload'"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div x-show="templates.filter(t => t.type === 'opposition').length === 0 && !currentUser" style="color: var(--gray-500); font-size: 0.875rem; padding: 1rem; background: var(--gray-50); border-radius: 8px; text-align: center;">
+                                No opposition templates uploaded yet.
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div><!-- End Manage Templates Page -->
@@ -1017,10 +1202,11 @@
         function app() {
             return {
                 // Page navigation
-                currentPage: 'rfp',
+                currentPage: 'home',
 
                 // RFP Tool state
                 currentStep: 1,
+                rfpHelpDismissed: false,
                 isDragging: false,
                 uploading: false,
                 analyzing: false,
@@ -1086,8 +1272,12 @@
                 templates: [],
                 templatesLoading: false,
                 templatesError: null,
-                templateUploading: false,
                 deletingTemplate: null,
+                templateUploadType: 'rfp',
+                rfpDragging: false,
+                oppositionDragging: false,
+                rfpUploading: false,
+                oppositionUploading: false,
 
                 async init() {
                     // Load objection presets
@@ -1122,6 +1312,7 @@
                 handleHashChange() {
                     const hash = window.location.hash.slice(1); // Remove #
                     const pageMap = {
+                        'home': 'home',
                         'rfp': 'rfp',
                         'motion-opposition': 'motion_opposition',
                         'templates': 'templates',
@@ -1132,8 +1323,8 @@
                     if (hash && pageMap[hash]) {
                         this.navigateTo(pageMap[hash], false);
                     } else if (!hash) {
-                        // Default to RFP if no hash
-                        this.currentPage = 'rfp';
+                        // Default to home if no hash
+                        this.currentPage = 'home';
                     }
                 },
 
@@ -1143,6 +1334,7 @@
                     // Update URL hash
                     if (updateHash) {
                         const hashMap = {
+                            'home': 'home',
                             'rfp': 'rfp',
                             'motion_opposition': 'motion-opposition',
                             'templates': 'templates',
@@ -1834,28 +2026,50 @@
                     }
                 },
 
-                async handleTemplateUpload(event) {
+                async handleTemplateFileSelect(event) {
                     const files = event.target.files;
                     if (files.length === 0) return;
 
                     const file = files[0];
+                    event.target.value = ''; // Reset input
+
+                    await this.uploadTemplateFile(file, this.templateUploadType);
+                },
+
+                async handleTemplateDropForType(event, type) {
+                    // Reset drag states
+                    this.rfpDragging = false;
+                    this.oppositionDragging = false;
+
+                    const files = event.dataTransfer.files;
+                    if (files.length === 0) return;
+
+                    const file = files[0];
+                    await this.uploadTemplateFile(file, type);
+                },
+
+                async uploadTemplateFile(file, type) {
                     if (!file.name.toLowerCase().endsWith('.docx')) {
                         this.templatesError = 'Please upload a .docx file';
                         return;
                     }
 
-                    this.templateUploading = true;
+                    // Set uploading state for the correct section
+                    if (type === 'rfp') {
+                        this.rfpUploading = true;
+                    } else {
+                        this.oppositionUploading = true;
+                    }
                     this.templatesError = null;
 
                     try {
-                        await API.uploadTemplate(file, this.currentUser.id);
+                        await API.uploadTemplate(file, this.currentUser.id, type);
                         await this.loadTemplates();
                     } catch (e) {
                         this.templatesError = e.message;
                     } finally {
-                        this.templateUploading = false;
-                        // Reset input
-                        event.target.value = '';
+                        this.rfpUploading = false;
+                        this.oppositionUploading = false;
                     }
                 },
 
@@ -1896,11 +2110,18 @@
                 formatDate(dateStr) {
                     if (!dateStr) return '';
                     const date = new Date(dateStr);
-                    return date.toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                    });
+                    const month = date.getMonth() + 1;
+                    const day = date.getDate();
+                    let hours = date.getHours();
+                    const minutes = date.getMinutes().toString().padStart(2, '0');
+                    const ampm = hours >= 12 ? 'pm' : 'am';
+                    hours = hours % 12 || 12;
+                    return `${month}/${day} ${hours}:${minutes}${ampm}`;
+                },
+
+                getInitials(name) {
+                    if (!name) return '?';
+                    return name.split(/[\s-]+/).map(n => n[0]).join('').toUpperCase();
                 }
             };
         }

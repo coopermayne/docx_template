@@ -21,8 +21,8 @@ MOTION_SESSION_DIR = os.path.join(Config.SESSION_PERSIST_DIR, 'motion_opposition
 os.makedirs(MOTION_UPLOAD_DIR, exist_ok=True)
 os.makedirs(MOTION_SESSION_DIR, exist_ok=True)
 
-# Template path
-TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates', 'oppo template.docx')
+# Fallback template path (used if no uploaded template exists)
+FALLBACK_TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates', 'oppo template.docx')
 
 
 def allowed_file(filename):
@@ -361,6 +361,8 @@ def generate_opposition(session_id):
     - associate_bar: Bar number (from logged-in user)
     - associate_email: Email (from logged-in user)
     """
+    from api.templates import get_latest_template_path
+
     session = load_session(session_id)
     if not session:
         return jsonify({'error': 'Session not found'}), 404
@@ -375,16 +377,20 @@ def generate_opposition(session_id):
     if not associate_name:
         return jsonify({'error': 'Associate name is required'}), 400
 
+    # Try to get uploaded template, fall back to local file
+    uploaded_template_path = get_latest_template_path('opposition')
+    template_path = uploaded_template_path or FALLBACK_TEMPLATE_PATH
+
     # Check template exists
-    if not os.path.exists(TEMPLATE_PATH):
+    if not os.path.exists(template_path):
         return jsonify({
             'error': 'Template not found',
-            'message': f'Expected template at: {TEMPLATE_PATH}'
+            'message': 'No opposition template uploaded and no fallback template available.'
         }), 500
 
     try:
         # Load template
-        doc = DocxTemplate(TEMPLATE_PATH)
+        doc = DocxTemplate(template_path)
 
         # Build context from session template vars + associate info
         template_vars = session['template_vars']
@@ -437,14 +443,27 @@ def generate_opposition(session_id):
 
         @response.call_on_close
         def cleanup():
+            # Clean up generated file
             try:
                 os.unlink(temp_file.name)
             except (OSError, FileNotFoundError):
                 pass
+            # Clean up downloaded template file (if from Supabase)
+            if uploaded_template_path:
+                try:
+                    os.unlink(uploaded_template_path)
+                except (OSError, FileNotFoundError):
+                    pass
 
         return response
 
     except Exception as e:
+        # Clean up downloaded template on error
+        if uploaded_template_path:
+            try:
+                os.unlink(uploaded_template_path)
+            except (OSError, FileNotFoundError):
+                pass
         return jsonify({
             'error': 'Failed to generate document',
             'message': str(e)

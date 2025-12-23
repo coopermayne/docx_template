@@ -52,7 +52,7 @@ def index():
 def api_info():
     """API information endpoint."""
     return jsonify({
-        'message': 'Legal RFP Response Tool API',
+        'message': 'Legal Document Tools API',
         'version': '2.0.0',
         'endpoints': {
             '/api/session/create': 'POST - Create a new session',

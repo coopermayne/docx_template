@@ -32,11 +32,15 @@ CREATE TABLE IF NOT EXISTS objections (
 CREATE TABLE IF NOT EXISTS templates (
     id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'rfp',  -- 'rfp' or 'opposition'
     description TEXT,
     storage_path TEXT NOT NULL UNIQUE,
     uploaded_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Add type column if table already exists
+-- ALTER TABLE templates ADD COLUMN type TEXT NOT NULL DEFAULT 'rfp';
 
 -- Create index for faster lookups
 CREATE INDEX IF NOT EXISTS idx_templates_uploaded_by ON templates(uploaded_by);
