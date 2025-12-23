@@ -21,12 +21,6 @@
                     <button class="nav-btn" :class="{ 'active': currentPage === 'motion_opposition' }" @click="switchPage('motion_opposition')">
                         Motion Opposition
                     </button>
-                    <button class="nav-btn" :class="{ 'active': currentPage === 'objections' }" @click="switchPage('objections')">
-                        Manage Objections
-                    </button>
-                    <button class="nav-btn" :class="{ 'active': currentPage === 'users' }" @click="switchPage('users')">
-                        Manage Users
-                    </button>
                     <div class="user-selector" style="margin-left: 1rem; position: relative;">
                         <button class="nav-btn" @click="showUserDropdown = !showUserDropdown" style="display: flex; align-items: center; gap: 0.5rem;">
                             <span x-text="currentUser ? currentUser.icon : '👤'" style="font-size: 1.2rem;"></span>
@@ -34,32 +28,26 @@
                             <span style="font-size: 0.7rem;">▼</span>
                         </button>
                         <div x-show="showUserDropdown" @click.away="showUserDropdown = false"
-                             class="user-dropdown" style="position: absolute; right: 0; top: 100%; background: white; border: 1px solid var(--gray-300); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; z-index: 100; margin-top: 0.5rem;">
-                            <div style="padding: 0.5rem 0;">
+                             class="user-dropdown" style="position: absolute; right: 0; top: 100%; background: white; border: 1px solid var(--gray-300); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 220px; z-index: 100; margin-top: 0.5rem;">
+                            <div class="dropdown-menu">
                                 <template x-for="user in users" :key="user.id">
-                                    <button @click="selectUser(user)"
-                                            style="display: flex; align-items: center; gap: 0.75rem; width: 100%; padding: 0.75rem 1rem; border: none; background: none; cursor: pointer; text-align: left;"
-                                            :style="currentUser?.id === user.id ? 'background: var(--gray-100);' : ''"
-                                            @mouseenter="$el.style.background = 'var(--gray-100)'"
-                                            @mouseleave="$el.style.background = currentUser?.id === user.id ? 'var(--gray-100)' : 'none'">
-                                        <span x-text="user.icon" style="font-size: 1.3rem;"></span>
-                                        <div>
-                                            <div style="font-weight: 500;" x-text="user.name"></div>
-                                            <div style="font-size: 0.75rem; color: var(--gray-500);" x-text="'Bar #' + user.bar_number"></div>
-                                        </div>
-                                    </button>
+                                    <a href="#" @click.prevent="selectUser(user)"
+                                       class="dropdown-item"
+                                       :class="{ 'active': currentUser?.id === user.id }">
+                                        <span x-text="user.icon"></span>
+                                        <span x-text="user.name.split(' ')[0]"></span>
+                                    </a>
                                 </template>
-                                <div x-show="users.length === 0" style="padding: 0.75rem 1rem; color: var(--gray-500); font-size: 0.875rem;">
-                                    No users configured
+                                <div x-show="users.length === 0" class="dropdown-item" style="color: var(--gray-500);">
+                                    No users yet
                                 </div>
-                                <div x-show="currentUser" style="border-top: 1px solid var(--gray-200); margin-top: 0.5rem; padding-top: 0.5rem;">
-                                    <button @click="signOut()"
-                                            style="width: 100%; padding: 0.75rem 1rem; border: none; background: none; cursor: pointer; text-align: left; color: var(--gray-600);"
-                                            @mouseenter="$el.style.background = 'var(--gray-100)'"
-                                            @mouseleave="$el.style.background = 'none'">
-                                        Sign Out
-                                    </button>
-                                </div>
+                                <div class="dropdown-divider"></div>
+                                <a href="#" @click.prevent="switchPage('users'); showUserDropdown = false" class="dropdown-item">
+                                    <span x-text="users.length === 0 ? '+ Add User' : 'Manage Users'"></span>
+                                </a>
+                                <a href="#" x-show="currentUser" @click.prevent="signOut()" class="dropdown-item">
+                                    Sign Out
+                                </a>
                             </div>
                         </div>
                     </div>
@@ -97,6 +85,13 @@
                     <span class="step-label">Generate</span>
                 </li>
             </ul>
+
+            <!-- RFP Toolbar -->
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
+                <button class="btn btn-secondary" style="font-size: 0.875rem;" @click="switchPage('objections')">
+                    Manage Objections
+                </button>
+            </div>
 
             <!-- Error Alert -->
             <div x-show="error" class="alert alert-error" x-text="error"></div>
@@ -460,6 +455,9 @@
             <!-- Manage Objections Page -->
             <div x-show="currentPage === 'objections'">
                 <div class="card">
+                    <a href="#" @click.prevent="switchPage('rfp')" style="display: inline-flex; align-items: center; gap: 0.25rem; color: var(--gray-500); text-decoration: none; font-size: 0.875rem; margin-bottom: 1rem;">
+                        ← Back to RFP Tool
+                    </a>
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                         <h2 class="card-title" style="margin: 0;">Manage Objections</h2>
                         <button class="btn btn-primary" @click="showAddObjection = true">+ Add Objection</button>

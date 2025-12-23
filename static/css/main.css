@@ -539,6 +539,36 @@ header h1 {
     border-color: var(--primary-color);
 }
 
+/* Dropdown Menu */
+.dropdown-menu {
+    padding: 0.5rem 0;
+}
+
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    color: var(--gray-700);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.dropdown-item:hover {
+    background: var(--gray-100);
+}
+
+.dropdown-item.active {
+    background: var(--gray-100);
+    font-weight: 500;
+}
+
+.dropdown-divider {
+    height: 1px;
+    background: var(--gray-200);
+    margin: 0.5rem 0;
+}
+
 /* Objections Management */
 .objections-list {
     display: flex;
