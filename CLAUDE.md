@@ -69,6 +69,8 @@ Services   Models
 - generate.py - Generate DOCX response
 - objections.py - Objections CRUD (Supabase)
 - users.py - Users CRUD (Supabase)
+- templates.py - Templates CRUD (Supabase + Storage)
+- motion_opposition.py - Motion opposition document generation
 
 ## Key Patterns
 
@@ -95,3 +97,13 @@ Stored in Supabase `objections` table. Requires `SUPABASE_URL` and `SUPABASE_ANO
 ### Users System
 Stored in Supabase `users` table (bar_number, name, email, icon).
 Frontend session stored in localStorage - users select from dropdown, no auth required.
+
+### Templates System
+Document templates (.docx) stored in Supabase Storage bucket `templates`.
+Metadata tracked in `templates` table. See `supabase_schema.sql` for setup.
+
+**Supabase Storage Setup:**
+1. Go to Supabase Dashboard > Storage
+2. Create a new bucket named `templates`
+3. Set bucket to private (not public)
+4. Configure RLS policies to allow authenticated access

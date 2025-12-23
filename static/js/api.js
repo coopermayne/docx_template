@@ -276,5 +276,42 @@ const API = {
         return this.request(`/users/${userId}`, {
             method: 'DELETE'
         });
+    },
+
+    // Templates endpoints
+    async getTemplates() {
+        return this.request('/templates');
+    },
+
+    async uploadTemplate(file, uploadedBy) {
+        return this.uploadFile('/templates/upload', file, { uploaded_by: uploadedBy });
+    },
+
+    async deleteTemplate(templateId) {
+        return this.request(`/templates/${templateId}`, {
+            method: 'DELETE'
+        });
+    },
+
+    async downloadTemplate(templateId) {
+        const response = await fetch(`${this.baseUrl}/templates/${templateId}/download`);
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Download failed');
+        }
+
+        // Extract filename from Content-Disposition header
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'template.docx';
+        if (contentDisposition) {
+            const match = contentDisposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i);
+            if (match) {
+                filename = decodeURIComponent(match[1]);
+            }
+        }
+
+        const blob = await response.blob();
+        return { blob, filename };
     }
 };

@@ -100,6 +100,86 @@ class SupabaseService:
         """Delete rows from a table."""
         return self._request('DELETE', table, params=filters)
 
+    # Storage operations
+    def upload_file(self, bucket: str, path: str, file_data: bytes, content_type: str = 'application/octet-stream') -> tuple[Any, int]:
+        """Upload a file to Supabase Storage."""
+        if not self.enabled:
+            return {'error': 'Supabase not configured'}, 503
+
+        url = f"{self.url}/storage/v1/object/{bucket}/{path}"
+        headers = {
+            'apikey': self.key,
+            'Authorization': f'Bearer {self.key}',
+            'Content-Type': content_type
+        }
+
+        try:
+            response = requests.post(
+                url=url,
+                headers=headers,
+                data=file_data,
+                timeout=30
+            )
+
+            result = response.json() if response.text else None
+            return result, response.status_code
+
+        except requests.exceptions.RequestException as e:
+            return {'error': str(e)}, 500
+
+    def download_file(self, bucket: str, path: str) -> tuple[Any, int]:
+        """Download a file from Supabase Storage."""
+        if not self.enabled:
+            return {'error': 'Supabase not configured'}, 503
+
+        url = f"{self.url}/storage/v1/object/{bucket}/{path}"
+        headers = {
+            'apikey': self.key,
+            'Authorization': f'Bearer {self.key}'
+        }
+
+        try:
+            response = requests.get(
+                url=url,
+                headers=headers,
+                timeout=30
+            )
+
+            if response.status_code == 200:
+                return response.content, 200
+            else:
+                result = response.json() if response.text else {'error': 'Download failed'}
+                return result, response.status_code
+
+        except requests.exceptions.RequestException as e:
+            return {'error': str(e)}, 500
+
+    def delete_file(self, bucket: str, paths: List[str]) -> tuple[Any, int]:
+        """Delete files from Supabase Storage."""
+        if not self.enabled:
+            return {'error': 'Supabase not configured'}, 503
+
+        url = f"{self.url}/storage/v1/object/{bucket}"
+        headers = {
+            'apikey': self.key,
+            'Authorization': f'Bearer {self.key}',
+            'Content-Type': 'application/json'
+        }
+
+        try:
+            response = requests.delete(
+                url=url,
+                headers=headers,
+                json={'prefixes': paths},
+                timeout=10
+            )
+
+            result = response.json() if response.text else None
+            return result, response.status_code
+
+        except requests.exceptions.RequestException as e:
+            return {'error': str(e)}, 500
+
 
 # Singleton instance
 _supabase = None

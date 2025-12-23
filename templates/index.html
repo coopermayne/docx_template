@@ -15,12 +15,15 @@
             <div class="container" style="display: flex; justify-content: space-between; align-items: center;">
                 <h1 style="margin: 0;">Legal RFP Response Tool</h1>
                 <nav class="header-nav">
-                    <button class="nav-btn" :class="{ 'active': currentPage === 'rfp' }" @click="switchPage('rfp')">
+                    <a class="nav-btn" :class="{ 'active': currentPage === 'rfp' }" href="#rfp" @click="navigateTo('rfp')">
                         RFP Tool
-                    </button>
-                    <button class="nav-btn" :class="{ 'active': currentPage === 'motion_opposition' }" @click="switchPage('motion_opposition')">
+                    </a>
+                    <a class="nav-btn" :class="{ 'active': currentPage === 'motion_opposition' }" href="#motion-opposition" @click="navigateTo('motion_opposition')">
                         Motion Opposition
-                    </button>
+                    </a>
+                    <a class="nav-btn" :class="{ 'active': currentPage === 'templates' }" href="#templates" @click="navigateTo('templates')">
+                        Manage Templates
+                    </a>
                     <div class="user-selector" style="margin-left: 1rem; position: relative;">
                         <button class="nav-btn" @click="showUserDropdown = !showUserDropdown" style="display: flex; align-items: center; gap: 0.5rem;">
                             <span x-text="currentUser ? currentUser.icon : '👤'" style="font-size: 1.2rem;"></span>
@@ -785,6 +788,99 @@
                 </div>
             </div><!-- End Manage Users Page -->
 
+            <!-- Manage Templates Page -->
+            <div x-show="currentPage === 'templates'">
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <h2 class="card-title" style="margin: 0;">Manage Templates</h2>
+                        <template x-if="currentUser">
+                            <button class="btn btn-primary" @click="$refs.templateInput.click()" :disabled="templateUploading">
+                                <span x-show="!templateUploading">+ Upload Template</span>
+                                <span x-show="templateUploading" class="loading"><span class="spinner"></span> Uploading...</span>
+                            </button>
+                        </template>
+                    </div>
+
+                    <p style="color: var(--gray-600); margin-bottom: 1.5rem;">
+                        Upload and manage Word document templates (.docx) used for generating legal documents.
+                    </p>
+
+                    <!-- Sign in prompt -->
+                    <template x-if="!currentUser">
+                        <div class="alert alert-info" style="margin-bottom: 1.5rem;">
+                            Please <a href="#" @click.prevent="showUserDropdown = true" style="color: #3b82f6; font-weight: 500;">sign in</a> to upload and manage templates.
+                        </div>
+                    </template>
+
+                    <!-- Error Alert -->
+                    <div x-show="templatesError" class="alert alert-error" x-text="templatesError"></div>
+
+                    <!-- Upload input (hidden) -->
+                    <input type="file"
+                           x-ref="templateInput"
+                           accept=".docx"
+                           style="display: none"
+                           @change="handleTemplateUpload($event)">
+
+                    <!-- Loading state -->
+                    <div x-show="templatesLoading" style="text-align: center; padding: 2rem;">
+                        <span class="loading"><span class="spinner"></span> Loading templates...</span>
+                    </div>
+
+                    <!-- Templates List -->
+                    <div x-show="!templatesLoading && templates.length > 0" class="objections-list">
+                        <template x-for="template in templates" :key="template.id">
+                            <div class="objection-item">
+                                <div class="objection-item-header">
+                                    <div class="objection-item-title" style="display: flex; align-items: center; gap: 0.75rem;">
+                                        <span style="font-size: 1.5rem;">📄</span>
+                                        <div>
+                                            <strong x-text="template.name"></strong>
+                                            <div style="font-size: 0.875rem; color: var(--gray-500);">
+                                                Uploaded by <span x-text="template.uploaded_by_name || 'Unknown'"></span>
+                                                <span x-show="template.created_at"> · <span x-text="formatDate(template.created_at)"></span></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="objection-item-actions" x-show="currentUser">
+                                        <button class="btn btn-sm btn-secondary" @click="downloadTemplate(template)">Download</button>
+                                        <button class="btn btn-sm btn-danger" @click="confirmDeleteTemplate(template)">Delete</button>
+                                    </div>
+                                </div>
+                                <div class="objection-item-body" x-show="template.description">
+                                    <div class="objection-field">
+                                        <label>Description:</label>
+                                        <p x-text="template.description"></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div x-show="!templatesLoading && templates.length === 0" style="text-align: center; padding: 2rem; color: var(--gray-500);">
+                        No templates uploaded yet. Click "Upload Template" to add one.
+                    </div>
+                </div>
+            </div><!-- End Manage Templates Page -->
+
+            <!-- Delete Template Confirmation Modal -->
+            <div x-show="deletingTemplate" class="modal-overlay" @click.self="deletingTemplate = null">
+                <div class="modal" style="max-width: 400px;">
+                    <div class="modal-header">
+                        <h3>Delete Template</h3>
+                        <button class="btn-icon" @click="deletingTemplate = null">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Are you sure you want to delete "<strong x-text="deletingTemplate?.name"></strong>"?</p>
+                        <p style="color: var(--gray-600); font-size: 0.875rem; margin-top: 0.5rem;">This action cannot be undone.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" @click="deletingTemplate = null">Cancel</button>
+                        <button class="btn btn-danger" @click="deleteTemplate()">Delete</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Add/Edit User Modal -->
             <div x-show="showAddUser || editingUser" class="modal-overlay" @click.self="closeUserModal()">
                 <div class="modal">
@@ -986,6 +1082,13 @@
                     icon: '👤'
                 },
 
+                // Templates state
+                templates: [],
+                templatesLoading: false,
+                templatesError: null,
+                templateUploading: false,
+                deletingTemplate: null,
+
                 async init() {
                     // Load objection presets
                     try {
@@ -1008,6 +1111,54 @@
                     } catch (e) {
                         console.error('Failed to load users:', e);
                         this.users = [];
+                    }
+
+                    // Handle hash-based routing
+                    this.handleHashChange();
+                    window.addEventListener('hashchange', () => this.handleHashChange());
+                },
+
+                // Hash routing
+                handleHashChange() {
+                    const hash = window.location.hash.slice(1); // Remove #
+                    const pageMap = {
+                        'rfp': 'rfp',
+                        'motion-opposition': 'motion_opposition',
+                        'templates': 'templates',
+                        'objections': 'objections',
+                        'users': 'users'
+                    };
+
+                    if (hash && pageMap[hash]) {
+                        this.navigateTo(pageMap[hash], false);
+                    } else if (!hash) {
+                        // Default to RFP if no hash
+                        this.currentPage = 'rfp';
+                    }
+                },
+
+                navigateTo(page, updateHash = true) {
+                    this.currentPage = page;
+
+                    // Update URL hash
+                    if (updateHash) {
+                        const hashMap = {
+                            'rfp': 'rfp',
+                            'motion_opposition': 'motion-opposition',
+                            'templates': 'templates',
+                            'objections': 'objections',
+                            'users': 'users'
+                        };
+                        window.location.hash = hashMap[page] || page;
+                    }
+
+                    // Load page-specific data
+                    if (page === 'objections') {
+                        this.loadManagedObjections();
+                    } else if (page === 'users') {
+                        this.loadManagedUsers();
+                    } else if (page === 'templates') {
+                        this.loadTemplates();
                     }
                 },
 
@@ -1443,14 +1594,9 @@
                     }
                 },
 
-                // Page navigation
-                async switchPage(page) {
-                    this.currentPage = page;
-                    if (page === 'objections') {
-                        await this.loadManagedObjections();
-                    } else if (page === 'users') {
-                        await this.loadManagedUsers();
-                    }
+                // Page navigation (legacy - use navigateTo instead)
+                switchPage(page) {
+                    this.navigateTo(page);
                 },
 
                 // Objections Management methods
@@ -1672,6 +1818,89 @@
                     } catch (e) {
                         this.userError = e.message;
                     }
+                },
+
+                // Template Management methods
+                async loadTemplates() {
+                    this.templatesLoading = true;
+                    this.templatesError = null;
+                    try {
+                        const data = await API.getTemplates();
+                        this.templates = data.templates || [];
+                    } catch (e) {
+                        this.templatesError = e.message;
+                    } finally {
+                        this.templatesLoading = false;
+                    }
+                },
+
+                async handleTemplateUpload(event) {
+                    const files = event.target.files;
+                    if (files.length === 0) return;
+
+                    const file = files[0];
+                    if (!file.name.toLowerCase().endsWith('.docx')) {
+                        this.templatesError = 'Please upload a .docx file';
+                        return;
+                    }
+
+                    this.templateUploading = true;
+                    this.templatesError = null;
+
+                    try {
+                        await API.uploadTemplate(file, this.currentUser.id);
+                        await this.loadTemplates();
+                    } catch (e) {
+                        this.templatesError = e.message;
+                    } finally {
+                        this.templateUploading = false;
+                        // Reset input
+                        event.target.value = '';
+                    }
+                },
+
+                confirmDeleteTemplate(template) {
+                    this.deletingTemplate = template;
+                },
+
+                async deleteTemplate() {
+                    if (!this.deletingTemplate) return;
+
+                    this.templatesError = null;
+
+                    try {
+                        await API.deleteTemplate(this.deletingTemplate.id);
+                        await this.loadTemplates();
+                        this.deletingTemplate = null;
+                    } catch (e) {
+                        this.templatesError = e.message;
+                    }
+                },
+
+                async downloadTemplate(template) {
+                    try {
+                        const { blob, filename } = await API.downloadTemplate(template.id);
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = filename || template.name;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                    } catch (e) {
+                        this.templatesError = e.message;
+                    }
+                },
+
+                formatDate(dateStr) {
+                    if (!dateStr) return '';
+                    const date = new Date(dateStr);
+                    return date.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    });
                 }
             };
         }
