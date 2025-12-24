@@ -322,11 +322,11 @@ class ClaudeService:
                 },
                 "judge_name": {
                     "type": "string",
-                    "description": "Name of the presiding district judge in format 'Judge [LastName]' (e.g., 'Judge Smith'). Empty string if not found or uncertain."
+                    "description": "Name of the presiding district judge in format 'Judge [LastName]'. ONLY if full name appears explicitly in document text. Do NOT infer from initials in case number. Empty string if only initials or not found."
                 },
                 "mag_judge_name": {
                     "type": "string",
-                    "description": "Name of the magistrate judge in format 'Magistrate Judge [LastName]' (e.g., 'Magistrate Judge Doe'). Empty string if not found or uncertain."
+                    "description": "Name of the magistrate judge in format 'Magistrate Judge [LastName]'. ONLY if full name appears explicitly in document text. Do NOT infer from initials in case number. Empty string if only initials or not found."
                 },
                 "motion_title": {
                     "type": "string",
@@ -610,9 +610,17 @@ Extract the following information from the motion document. These fields will be
 
 6. **case_number**: The case number exactly as it appears (e.g., "2:24-cv-01234-ABC-XYZ", "BC123456"). Leave empty if not found.
 
-7. **judge_name**: The presiding district judge in format "Judge [LastName]" (e.g., "Judge Smith"). Leave as empty string if not found or uncertain.
+7. **judge_name**: The presiding district judge in format "Judge [LastName]" (e.g., "Judge Smith").
+   - ONLY extract if the judge's FULL NAME appears explicitly in the document text
+   - Do NOT infer or look up names from initials in the case number (e.g., if case number is "2:24-cv-01234-ABC-XYZ", do NOT look up what ABC stands for)
+   - Do NOT use your knowledge of which judges have which initials
+   - If only initials appear, return empty string ""
 
-8. **mag_judge_name**: The magistrate judge in format "Magistrate Judge [LastName]" (e.g., "Magistrate Judge Doe"). Leave as empty string if not found or uncertain.
+8. **mag_judge_name**: The magistrate judge in format "Magistrate Judge [LastName]" (e.g., "Magistrate Judge Doe").
+   - ONLY extract if the magistrate judge's FULL NAME appears explicitly in the document text
+   - Do NOT infer or look up names from initials in the case number
+   - Do NOT use your knowledge of which judges have which initials
+   - If only initials appear, return empty string ""
 
 9. **motion_title**: The title of the original motion being opposed, exactly as it appears (e.g., "Motion to Compel Discovery", "Motion for Summary Judgment").
 
