@@ -1508,9 +1508,12 @@
                 async runAnalysis() {
                     this.analyzing = true;
                     this.error = null;
-                    this.analysisProgress = { progress: 0, message: 'Starting analysis...', completedChunks: 0, totalChunks: 0 };
+                    this.analysisProgress = { progress: 0, message: 'Saving requests...', completedChunks: 0, totalChunks: 0 };
 
                     try {
+                        // Sync requests to server before analysis (handles adds/removes/edits)
+                        await API.syncRequests(this.session.id, this.session.requests);
+
                         // Progress callback to update UI
                         const onProgress = (progress) => {
                             this.analysisProgress = {

@@ -149,6 +149,13 @@ const API = {
         });
     },
 
+    async syncRequests(sessionId, requests) {
+        return this.request(`/rfp/${sessionId}/requests/sync`, {
+            method: 'PUT',
+            body: JSON.stringify({ requests })
+        });
+    },
+
     // Document endpoints
     async uploadDocuments(sessionId, files) {
         return this.uploadFiles('/documents/upload', files, { session_id: sessionId });

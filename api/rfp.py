@@ -347,6 +347,62 @@ def bulk_update_requests(session_id):
     })
 
 
+@rfp_bp.route('/<session_id>/requests/sync', methods=['PUT'])
+def sync_requests(session_id):
+    """
+    Sync/replace the full requests list.
+
+    This replaces the server's request list with the frontend's version,
+    handling additions, deletions, and edits.
+
+    Accepts JSON body:
+    {
+        "requests": [
+            {"id": 1, "number": "1", "text": "..."},
+            {"id": 2, "number": "2", "text": "..."}
+        ]
+    }
+    """
+    from models import RFPRequest
+
+    session = session_store.get(session_id)
+    if not session:
+        return jsonify({'error': 'Session not found'}), 404
+
+    data = request.get_json()
+    if not data or 'requests' not in data:
+        return jsonify({'error': 'No requests provided'}), 400
+
+    # Build new requests list from frontend data
+    new_requests = []
+    for req_data in data['requests']:
+        new_requests.append(RFPRequest(
+            id=req_data.get('id', len(new_requests) + 1),
+            number=req_data.get('number', str(len(new_requests) + 1)),
+            text=req_data.get('text', ''),
+            raw_text=req_data.get('raw_text', req_data.get('text', '')),
+            suggested_objections=req_data.get('suggested_objections', []),
+            suggested_documents=req_data.get('suggested_documents', []),
+            selected_objections=req_data.get('selected_objections', []),
+            selected_documents=req_data.get('selected_documents', []),
+            objection_reasoning=req_data.get('objection_reasoning', {}),
+            objection_arguments=req_data.get('objection_arguments', {}),
+            ai_notes=req_data.get('ai_notes', ''),
+            user_notes=req_data.get('user_notes', ''),
+            include_in_response=req_data.get('include_in_response', True)
+        ))
+
+    session.requests = new_requests
+    session_store.update(session)
+
+    logger.info(f"Synced {len(new_requests)} requests for session {session_id}")
+
+    return jsonify({
+        'message': f'Synced {len(new_requests)} requests',
+        'count': len(new_requests)
+    })
+
+
 @rfp_bp.route('/<session_id>/case-info', methods=['GET'])
 def get_case_info(session_id):
     """Get extracted case information for a session."""
