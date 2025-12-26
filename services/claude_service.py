@@ -302,11 +302,11 @@ class ClaudeService:
                 },
                 "plaintiff_caption": {
                     "type": "string",
-                    "description": "Plaintiff name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple, join with semicolons. Include 'et al.' if present."
+                    "description": "Plaintiff name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple, join with semicolons. Include 'et al.' if present. Do NOT include trailing punctuation (comma, semicolon, period) at the end."
                 },
                 "defendant_caption": {
                     "type": "string",
-                    "description": "Defendant name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple, join with semicolons. Include 'et al.' if present."
+                    "description": "Defendant name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple, join with semicolons. Include 'et al.' if present. Do NOT include trailing punctuation (comma, semicolon, period) at the end."
                 },
                 "multiple_plaintiffs": {
                     "type": "boolean",
@@ -330,7 +330,7 @@ class ClaudeService:
                 },
                 "motion_title": {
                     "type": "string",
-                    "description": "The title of the original motion being opposed, exactly as it appears (e.g., 'Motion to Compel Discovery', 'Motion for Summary Judgment')"
+                    "description": "The title of the original motion being opposed, in Title Case even if document uses ALL CAPS (e.g., 'Motion to Compel Discovery', 'Motion for Summary Judgment')"
                 },
                 "cert_of_compliance": {
                     "type": "boolean",
@@ -605,9 +605,9 @@ Extract the following information from the motion document. These fields will be
    or "SUPERIOR COURT OF CALIFORNIA\\nCOUNTY OF LOS ANGELES"
    Use \\n for the line break. Leave empty if not found.
 
-2. **plaintiff_caption**: The plaintiff name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple plaintiffs, join with semicolons. Include "et al." if present.
+2. **plaintiff_caption**: The plaintiff name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple plaintiffs, join with semicolons. Include "et al." if present. Do NOT include trailing punctuation (comma, semicolon, period) at the end - the template adds punctuation automatically.
 
-3. **defendant_caption**: The defendant name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple defendants, join with semicolons. Include "et al." if present.
+3. **defendant_caption**: The defendant name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple defendants, join with semicolons. Include "et al." if present. Do NOT include trailing punctuation (comma, semicolon, period) at the end - the template adds punctuation automatically.
 
 4. **multiple_plaintiffs**: True if there is more than one plaintiff or "et al." is present, false otherwise.
 
@@ -627,7 +627,7 @@ Extract the following information from the motion document. These fields will be
    - Do NOT use your knowledge of which judges have which initials
    - If only initials appear, return empty string ""
 
-9. **motion_title**: The title of the original motion being opposed, exactly as it appears (e.g., "Motion to Compel Discovery", "Motion for Summary Judgment").
+9. **motion_title**: The title of the original motion being opposed, in Title Case (e.g., "Motion to Compel Discovery", "Motion for Summary Judgment"). Even if the document uses ALL CAPS, convert to Title Case.
 
 10. **cert_of_compliance**: True if this is a federal case in the Central District of California, false otherwise. Look for "CENTRAL DISTRICT OF CALIFORNIA" in the court_name. This controls whether local rules compliance language is included.
 
@@ -822,11 +822,7 @@ Today's date: {today_date}
 Return ONLY the filename, nothing else."""
 
         try:
-            response = self._call_claude_api(
-                prompt=prompt,
-                tools=[],
-                max_tokens=100
-            )
+            response = self._call_claude_api_simple(prompt=prompt, max_tokens=100)
 
             # Extract the text response
             for block in response.content:
@@ -834,9 +830,11 @@ Return ONLY the filename, nothing else."""
                     filename = block.text.strip()
                     # Remove any quotes if present
                     filename = filename.strip('"\'')
+                    logger.info(f"Generated filename: {filename}")
                     return filename
 
             # Fallback if no text found
+            logger.warning("No text in filename generation response, using fallback")
             return self._fallback_generate_filename(document_title, today_date)
 
         except Exception as e:

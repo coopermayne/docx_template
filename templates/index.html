@@ -547,16 +547,18 @@
                 <div x-show="motionError" class="alert alert-error" x-text="motionError"></div>
 
                 <!-- Extraction Modal -->
-                <div x-show="motionUploading" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
-                    <div class="card" style="max-width: 400px; text-align: center;">
-                        <div style="font-size: 3rem; margin-bottom: 1rem;">📄</div>
-                        <h3 style="margin: 0 0 0.5rem 0;">Extracting Information</h3>
-                        <p style="color: var(--gray-600); margin-bottom: 1.5rem;">Analyzing document...</p>
-                        <div class="loading" style="justify-content: center;">
-                            <span class="spinner"></span>
+                <template x-if="motionUploading">
+                    <div style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
+                        <div class="card" style="max-width: 400px; text-align: center;">
+                            <div style="font-size: 3rem; margin-bottom: 1rem;">📄</div>
+                            <h3 style="margin: 0 0 0.5rem 0;">Extracting Information</h3>
+                            <p style="color: var(--gray-600); margin-bottom: 1.5rem;">Analyzing document...</p>
+                            <div class="loading" style="justify-content: center;">
+                                <span class="spinner"></span>
+                            </div>
                         </div>
                     </div>
-                </div>
+                </template>
 
                 <div class="card">
                     <h2 class="card-title" style="margin-bottom: 0.5rem;">Document Generator</h2>
@@ -600,50 +602,57 @@
                             <div style="display: grid; gap: 0.75rem;">
                                 <!-- Court -->
                                 <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem; align-items: start;">
-                                    <label style="color: var(--gray-500); font-size: 0.875rem; padding-top: 0.5rem;">Court:</label>
+                                    <label style="color: var(--gray-500); font-size: 0.875rem; padding-top: 0.5rem;">Court:<span style="color: #ef4444;">*</span></label>
                                     <textarea x-model="motionTemplateVars.court_name"
                                               @blur="saveField('court_name')"
                                               class="form-input"
+                                              :style="hasFieldError('court_name') ? 'border-color: #ef4444; background-color: #fef2f2;' : ''"
                                               style="padding: 0.5rem; font-size: 0.875rem; min-height: 3.5rem; resize: vertical;"
                                               placeholder="UNITED STATES DISTRICT COURT&#10;CENTRAL DISTRICT OF CALIFORNIA"></textarea>
                                 </div>
                                 <!-- Case Number -->
                                 <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem; align-items: center;">
-                                    <label style="color: var(--gray-500); font-size: 0.875rem;">Case Number:</label>
+                                    <label style="color: var(--gray-500); font-size: 0.875rem;">Case Number:<span style="color: #ef4444;">*</span></label>
                                     <input type="text"
                                            x-model="motionTemplateVars.case_number"
                                            @blur="saveField('case_number')"
                                            class="form-input"
+                                           :style="hasFieldError('case_number') ? 'border-color: #ef4444; background-color: #fef2f2;' : ''"
                                            style="padding: 0.5rem; font-size: 0.875rem;"
                                            placeholder="2:24-cv-01234-ABC-XYZ">
                                 </div>
                                 <!-- Plaintiff Caption -->
-                                <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem; align-items: center;">
-                                    <label style="color: var(--gray-500); font-size: 0.875rem;">Plaintiff(s):</label>
-                                    <input type="text"
-                                           x-model="motionTemplateVars.plaintiff_caption"
-                                           @blur="saveField('plaintiff_caption')"
-                                           class="form-input"
-                                           style="padding: 0.5rem; font-size: 0.875rem;"
-                                           placeholder="JOHN DOE">
+                                <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem; align-items: start;">
+                                    <label style="color: var(--gray-500); font-size: 0.875rem; padding-top: 0.5rem;">Plaintiff(s):<span style="color: #ef4444;">*</span></label>
+                                    <textarea x-model="motionTemplateVars.plaintiff_caption"
+                                              @blur="saveField('plaintiff_caption')"
+                                              @keydown.enter.prevent
+                                              @input="motionTemplateVars.plaintiff_caption = $event.target.value.replace(/[\r\n]+/g, ' ')"
+                                              class="form-input"
+                                              :style="hasFieldError('plaintiff_caption') ? 'border-color: #ef4444; background-color: #fef2f2;' : ''"
+                                              style="padding: 0.5rem; font-size: 0.875rem; min-height: 2.5rem; resize: vertical;"
+                                              placeholder="JOHN DOE"></textarea>
                                 </div>
                                 <!-- Defendant Caption -->
-                                <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem; align-items: center;">
-                                    <label style="color: var(--gray-500); font-size: 0.875rem;">Defendant(s):</label>
-                                    <input type="text"
-                                           x-model="motionTemplateVars.defendant_caption"
-                                           @blur="saveField('defendant_caption')"
-                                           class="form-input"
-                                           style="padding: 0.5rem; font-size: 0.875rem;"
-                                           placeholder="ACME CORPORATION">
+                                <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem; align-items: start;">
+                                    <label style="color: var(--gray-500); font-size: 0.875rem; padding-top: 0.5rem;">Defendant(s):<span style="color: #ef4444;">*</span></label>
+                                    <textarea x-model="motionTemplateVars.defendant_caption"
+                                              @blur="saveField('defendant_caption')"
+                                              @keydown.enter.prevent
+                                              @input="motionTemplateVars.defendant_caption = $event.target.value.replace(/[\r\n]+/g, ' ')"
+                                              class="form-input"
+                                              :style="hasFieldError('defendant_caption') ? 'border-color: #ef4444; background-color: #fef2f2;' : ''"
+                                              style="padding: 0.5rem; font-size: 0.875rem; min-height: 2.5rem; resize: vertical;"
+                                              placeholder="ACME CORPORATION"></textarea>
                                 </div>
                                 <!-- Judge -->
                                 <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem; align-items: center;">
-                                    <label style="color: var(--gray-500); font-size: 0.875rem;">Judge:</label>
+                                    <label style="color: var(--gray-500); font-size: 0.875rem;">Judge:<span style="color: #ef4444;">*</span></label>
                                     <input type="text"
                                            x-model="motionTemplateVars.judge_name"
                                            @blur="saveField('judge_name')"
                                            class="form-input"
+                                           :style="hasFieldError('judge_name') ? 'border-color: #ef4444; background-color: #fef2f2;' : ''"
                                            style="padding: 0.5rem; font-size: 0.875rem;"
                                            placeholder="Judge Smith">
                                 </div>
@@ -659,31 +668,72 @@
                                 </div>
                                 <!-- Motion Title -->
                                 <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem; align-items: center;">
-                                    <label style="color: var(--gray-500); font-size: 0.875rem;">Motion Title:</label>
+                                    <label style="color: var(--gray-500); font-size: 0.875rem;">Motion Title:<span style="color: #ef4444;">*</span></label>
                                     <input type="text"
                                            x-model="motionTemplateVars.motion_title"
                                            @blur="saveField('motion_title')"
                                            class="form-input"
+                                           :style="hasFieldError('motion_title') ? 'border-color: #ef4444; background-color: #fef2f2;' : ''"
                                            style="padding: 0.5rem; font-size: 0.875rem;"
                                            placeholder="Motion to Compel Discovery">
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Section 2: Document Details -->
+                        <!-- Section 2: Hearing Information (Optional) -->
+                        <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 1rem;">
+                            <h4 style="margin: 0 0 1rem 0; color: #92400e; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">Hearing Information <span style="font-weight: normal; text-transform: none;">(Optional)</span></h4>
+                            <div style="display: grid; gap: 0.75rem;">
+                                <!-- Hearing Date -->
+                                <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem; align-items: center;">
+                                    <label style="color: var(--gray-500); font-size: 0.875rem;">Hearing Date:</label>
+                                    <input type="text"
+                                           x-model="motionTemplateVars.hearing_date"
+                                           @blur="saveField('hearing_date')"
+                                           class="form-input"
+                                           style="padding: 0.5rem; font-size: 0.875rem;"
+                                           placeholder="e.g., January 15, 2025">
+                                </div>
+                                <!-- Hearing Time -->
+                                <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem; align-items: center;">
+                                    <label style="color: var(--gray-500); font-size: 0.875rem;">Hearing Time:</label>
+                                    <input type="text"
+                                           x-model="motionTemplateVars.hearing_time"
+                                           @blur="saveField('hearing_time')"
+                                           class="form-input"
+                                           style="padding: 0.5rem; font-size: 0.875rem;"
+                                           placeholder="e.g., 10:00 a.m.">
+                                </div>
+                                <!-- Hearing Location -->
+                                <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem; align-items: center;">
+                                    <label style="color: var(--gray-500); font-size: 0.875rem;">Courtroom:</label>
+                                    <input type="text"
+                                           x-model="motionTemplateVars.hearing_location"
+                                           @blur="saveField('hearing_location')"
+                                           class="form-input"
+                                           style="padding: 0.5rem; font-size: 0.875rem;"
+                                           placeholder="e.g., Courtroom 10A or 350">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Section 3: Document Details -->
                         <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 1rem;">
                             <h4 style="margin: 0 0 1rem 0; color: #166534; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">Document Details</h4>
                             <div style="display: grid; gap: 0.75rem;">
                                 <!-- Document Title -->
                                 <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr auto; gap: 0.5rem; align-items: center;">
-                                    <span style="color: var(--gray-500); font-size: 0.875rem;">Document Title:</span>
+                                    <span style="color: var(--gray-500); font-size: 0.875rem;">Document Title:<span style="color: #ef4444;">*</span></span>
                                     <input type="text"
                                            x-model="documentTitle"
+                                           @blur="validateField('documentTitle')"
                                            class="form-input"
+                                           :style="hasFieldError('documentTitle') ? 'border-color: #ef4444; background-color: #fef2f2;' : ''"
                                            style="padding: 0.5rem; font-size: 0.875rem;"
                                            placeholder="e.g., Opposition to Motion to Compel">
-                                    <button @click="suggestDocumentTitle()"
-                                            :disabled="suggestingTitle || !motionSessionId"
+                                    <button x-show="motionFilename"
+                                            @click="suggestDocumentTitle()"
+                                            :disabled="suggestingTitle"
                                             class="btn btn-secondary"
                                             style="padding: 0.4rem 0.75rem; font-size: 0.75rem; white-space: nowrap;"
                                             title="Suggest a title based on the motion">
@@ -698,7 +748,7 @@
                             </div>
                         </div>
 
-                        <!-- Section 3: Signing Attorney -->
+                        <!-- Section 4: Signing Attorney -->
                         <div style="background: #e8f4fd; border: 1px solid #3b82f6; border-radius: 8px; padding: 1rem;">
                             <h4 style="margin: 0 0 1rem 0; color: #1e40af; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">Signing Attorney</h4>
                             <template x-if="currentUser">
@@ -1159,6 +1209,8 @@
                 editingField: null,
                 editingValue: '',
                 inlineEditError: null,
+                // Validation state
+                fieldErrors: {},
 
                 // Objections Management state
                 managedObjections: [],
@@ -1596,13 +1648,19 @@
                     this.editingField = null;
                     this.editingValue = '';
                     this.inlineEditError = null;
+                    this.fieldErrors = {};
                     // Create a fresh session
                     await this.initDocGenerator();
                 },
 
                 canGenerateDocument() {
                     const v = this.motionTemplateVars;
-                    return v.court_name && v.case_number && v.plaintiff_caption && v.defendant_caption && this.documentTitle;
+                    // Check required fields are present
+                    const hasRequired = v.court_name && v.case_number && v.plaintiff_caption &&
+                                       v.defendant_caption && v.judge_name && v.motion_title && this.documentTitle;
+                    // Check no validation errors
+                    const hasNoErrors = Object.keys(this.fieldErrors).length === 0;
+                    return hasRequired && hasNoErrors;
                 },
 
                 getMissingRequiredFields() {
@@ -1612,7 +1670,25 @@
                     if (!v.case_number) missing.push('Case Number');
                     if (!v.plaintiff_caption) missing.push('Plaintiff Caption');
                     if (!v.defendant_caption) missing.push('Defendant Caption');
+                    if (!v.judge_name) missing.push('Judge');
+                    if (!v.motion_title) missing.push('Motion Title');
                     if (!this.documentTitle) missing.push('Document Title');
+                    // Also include validation errors
+                    for (const [field, error] of Object.entries(this.fieldErrors)) {
+                        const fieldLabels = {
+                            court_name: 'Court',
+                            case_number: 'Case Number',
+                            plaintiff_caption: 'Plaintiff',
+                            defendant_caption: 'Defendant',
+                            judge_name: 'Judge',
+                            motion_title: 'Motion Title',
+                            documentTitle: 'Document Title'
+                        };
+                        const label = fieldLabels[field] || field;
+                        if (!missing.includes(label)) {
+                            missing.push(`${label} (${error})`);
+                        }
+                    }
                     return missing;
                 },
 
@@ -1632,6 +1708,9 @@
 
                 // Save field on blur
                 async saveField(field) {
+                    // Run validation
+                    this.validateField(field);
+
                     if (!this.motionSessionId) return;
 
                     try {
@@ -1639,6 +1718,56 @@
                     } catch (e) {
                         this.motionError = 'Failed to save: ' + e.message;
                     }
+                },
+
+                validateField(field) {
+                    const v = this.motionTemplateVars;
+                    const value = (field === 'documentTitle') ? this.documentTitle : (v[field] || '');
+
+                    // Clear previous error
+                    delete this.fieldErrors[field];
+
+                    // Required field check (all except mag_judge_name and hearing fields)
+                    const optionalFields = ['mag_judge_name', 'hearing_date', 'hearing_time', 'hearing_location'];
+                    const requiredFields = ['court_name', 'case_number', 'plaintiff_caption', 'defendant_caption', 'judge_name', 'motion_title', 'documentTitle'];
+
+                    if (requiredFields.includes(field) && !value.trim()) {
+                        this.fieldErrors[field] = 'Required';
+                        return false;
+                    }
+
+                    // Case number must start with a number
+                    if (field === 'case_number' && value.trim() && !/^\d/.test(value.trim())) {
+                        this.fieldErrors[field] = 'Must start with a number';
+                        return false;
+                    }
+
+                    // Plaintiff/Defendant must end with letter or number
+                    if ((field === 'plaintiff_caption' || field === 'defendant_caption') && value.trim()) {
+                        const trimmed = value.trim();
+                        const lastChar = trimmed[trimmed.length - 1];
+                        if (/[,;.]/.test(lastChar)) {
+                            this.fieldErrors[field] = 'Cannot end with comma, semicolon, or period';
+                            return false;
+                        }
+                    }
+
+                    return true;
+                },
+
+                validateAllFields() {
+                    const fields = ['court_name', 'case_number', 'plaintiff_caption', 'defendant_caption', 'judge_name', 'motion_title', 'documentTitle'];
+                    let allValid = true;
+                    for (const field of fields) {
+                        if (!this.validateField(field)) {
+                            allValid = false;
+                        }
+                    }
+                    return allValid;
+                },
+
+                hasFieldError(field) {
+                    return !!this.fieldErrors[field];
                 },
 
                 // Inline editing methods (legacy, keeping for compatibility)
@@ -1715,9 +1844,9 @@
                         return;
                     }
 
-                    const missingFields = this.getMissingRequiredFields();
-                    if (missingFields.length > 0) {
-                        this.motionError = `Missing required fields: ${missingFields.join(', ')}`;
+                    // Run validation on all fields
+                    if (!this.validateAllFields()) {
+                        this.motionError = 'Please fix the validation errors above';
                         return;
                     }
 
