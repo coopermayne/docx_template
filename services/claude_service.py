@@ -952,13 +952,21 @@ Extract each request with its number and exact verbatim text. Call the submit_re
         self,
         requests: List[RFPRequest],
         documents: List[Document],
-        objections: List[Dict[str, Any]]
+        objections: List[Dict[str, Any]],
+        progress_callback: Optional[Callable[[int, int, str], None]] = None
     ) -> Dict[str, Dict[str, Any]]:
         """
         Analyze RFP requests and suggest objections and responsive documents.
 
         For large RFPs, requests are processed in parallel chunks controlled by
         Config.ANALYSIS_CHUNK_SIZE (default: 10 requests per chunk).
+
+        Args:
+            requests: List of RFP requests to analyze
+            documents: List of available documents
+            objections: List of available objections
+            progress_callback: Optional callback(completed_chunks, total_chunks, message)
+                              Called after each chunk completes for progress updates.
 
         Returns:
             {
@@ -976,7 +984,10 @@ Extract each request with its number and exact verbatim text. Call the submit_re
 
         # If small enough, process in single call
         if len(requests) <= chunk_size:
-            return self._analyze_chunk(requests, documents, objections)
+            result = self._analyze_chunk(requests, documents, objections)
+            if progress_callback:
+                progress_callback(1, 1, "Analysis complete")
+            return result
 
         # Split into chunks and process in parallel
         chunks = [
@@ -984,15 +995,15 @@ Extract each request with its number and exact verbatim text. Call the submit_re
             for i in range(0, len(requests), chunk_size)
         ]
 
-        print(f"Analyzing {len(requests)} requests in {len(chunks)} parallel chunks of ~{chunk_size}")
-        import sys
-        sys.stdout.flush()
+        total_chunks = len(chunks)
+        logger.info(f"Analyzing {len(requests)} requests in {total_chunks} parallel chunks of ~{chunk_size}")
 
         all_results = {}
+        completed_count = 0
 
         # Process chunks in parallel with capped workers
         num_workers = min(len(chunks), MAX_PARALLEL_WORKERS)
-        logger.info(f"Using {num_workers} parallel workers for {len(chunks)} chunks")
+        logger.info(f"Using {num_workers} parallel workers for {total_chunks} chunks")
 
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             # Submit all chunks
@@ -1020,6 +1031,15 @@ Extract each request with its number and exact verbatim text. Call the submit_re
                     failed_chunk = chunks[chunk_idx]
                     fallback = self._fallback_analysis(failed_chunk, documents, objections)
                     all_results.update(fallback)
+
+                # Update progress after each chunk
+                completed_count += 1
+                if progress_callback:
+                    progress_callback(
+                        completed_count,
+                        total_chunks,
+                        f"Analyzed {completed_count}/{total_chunks} chunks ({len(all_results)} requests)"
+                    )
 
         logger.info(f"Analysis complete: {len(all_results)} total results")
         return all_results

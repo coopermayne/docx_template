@@ -224,24 +224,31 @@
                 <h2 class="card-title">Upload Request for Production (RFP)</h2>
 
                 <div class="upload-zone"
-                     :class="{ 'dragover': isDragging }"
+                     :class="{ 'dragover': isDragging, 'processing': uploading }"
                      @dragover.prevent="isDragging = true"
                      @dragleave.prevent="isDragging = false"
                      @drop.prevent="handleRFPDrop($event)"
-                     @click="$refs.rfpInput.click()">
+                     @click="!uploading && $refs.rfpInput.click()">
                     <div class="upload-zone-icon">📄</div>
                     <div class="upload-zone-text">
                         <template x-if="!uploading">
                             <span>Drag & drop your RFP PDF here, or click to browse</span>
                         </template>
                         <template x-if="uploading">
-                            <span class="loading">
-                                <span class="spinner"></span>
-                                Parsing PDF...
-                            </span>
+                            <div style="text-align: center;">
+                                <span class="loading">
+                                    <span class="spinner"></span>
+                                    <span x-text="uploadProgress.message || 'Processing...'"></span>
+                                </span>
+                                <div x-show="uploadProgress.progress > 0" style="margin-top: 0.75rem;">
+                                    <div style="background: var(--gray-200); border-radius: 4px; height: 6px; overflow: hidden; max-width: 200px; margin: 0 auto;">
+                                        <div :style="`width: ${uploadProgress.progress}%; background: var(--primary-500); height: 100%; transition: width 0.3s ease;`"></div>
+                                    </div>
+                                </div>
+                            </div>
                         </template>
                     </div>
-                    <div class="upload-zone-hint">PDF files only</div>
+                    <div class="upload-zone-hint" x-show="!uploading">PDF files only</div>
                 </div>
                 <input type="file"
                        x-ref="rfpInput"
@@ -379,17 +386,24 @@
 
                 <div class="actions-bar">
                     <button class="btn btn-secondary" @click="goToStep(1)">← Back</button>
-                    <button class="btn btn-primary" @click="runAnalysis()" :disabled="analyzing">
+                    <button class="btn btn-primary" @click="runAnalysis()" :disabled="analyzing" style="min-width: 180px;">
                         <template x-if="!analyzing">
                             <span>Analyze with AI →</span>
                         </template>
                         <template x-if="analyzing">
                             <span class="loading" style="padding: 0;">
                                 <span class="spinner"></span>
-                                Analyzing...
+                                <span x-text="analysisProgress.totalChunks > 1 ? `Analyzing... ${analysisProgress.progress}%` : 'Analyzing...'"></span>
                             </span>
                         </template>
                     </button>
+                </div>
+                <!-- Progress indicator for long analyses -->
+                <div x-show="analyzing && analysisProgress.totalChunks > 1" class="analysis-progress" style="margin-top: 1rem;">
+                    <div class="progress-bar-container" style="background: var(--gray-200); border-radius: 4px; height: 8px; overflow: hidden;">
+                        <div class="progress-bar-fill" :style="`width: ${analysisProgress.progress}%; background: var(--primary-500); height: 100%; transition: width 0.3s ease;`"></div>
+                    </div>
+                    <p style="margin-top: 0.5rem; color: var(--gray-600); font-size: 0.875rem;" x-text="analysisProgress.message"></p>
                 </div>
             </div>
 
@@ -1183,7 +1197,9 @@
                 rfpHelpDismissed: false,
                 isDragging: false,
                 uploading: false,
+                uploadProgress: { progress: 0, message: '' },
                 analyzing: false,
+                analysisProgress: { progress: 0, message: '', completedChunks: 0, totalChunks: 0 },
                 generating: false,
                 error: null,
 
@@ -1362,9 +1378,18 @@
                 async uploadRFP(file) {
                     this.uploading = true;
                     this.error = null;
+                    this.uploadProgress = { progress: 0, message: 'Uploading PDF...' };
 
                     try {
-                        const data = await API.uploadRFP(file, this.session.id);
+                        // Progress callback for polling
+                        const onProgress = (progress) => {
+                            this.uploadProgress = {
+                                progress: progress.progress || 0,
+                                message: progress.message || 'Processing...'
+                            };
+                        };
+
+                        const data = await API.uploadRFP(file, this.session.id, onProgress);
                         this.session.id = data.session_id;
                         this.session.requests = data.requests.map(r => ({
                             ...r,
@@ -1376,6 +1401,7 @@
                         this.error = e.message;
                     } finally {
                         this.uploading = false;
+                        this.uploadProgress = { progress: 0, message: '' };
                     }
                 },
 
@@ -1482,9 +1508,20 @@
                 async runAnalysis() {
                     this.analyzing = true;
                     this.error = null;
+                    this.analysisProgress = { progress: 0, message: 'Starting analysis...', completedChunks: 0, totalChunks: 0 };
 
                     try {
-                        const data = await API.runAnalysis(this.session.id);
+                        // Progress callback to update UI
+                        const onProgress = (progress) => {
+                            this.analysisProgress = {
+                                progress: progress.progress || 0,
+                                message: progress.message || 'Analyzing...',
+                                completedChunks: progress.completedChunks || 0,
+                                totalChunks: progress.totalChunks || 0
+                            };
+                        };
+
+                        const data = await API.runAnalysis(this.session.id, onProgress);
 
                         // Update requests with suggestions
                         if (data.suggestions) {
@@ -1510,6 +1547,7 @@
                         this.goToStep(3);
                     } finally {
                         this.analyzing = false;
+                        this.analysisProgress = { progress: 0, message: '', completedChunks: 0, totalChunks: 0 };
                     }
                 },
 

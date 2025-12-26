@@ -84,9 +84,51 @@ const API = {
     },
 
     // RFP endpoints
-    async uploadRFP(file, sessionId = null) {
+    async uploadRFP(file, sessionId = null, onProgress = null) {
         const data = sessionId ? { session_id: sessionId } : {};
-        return this.uploadFile('/rfp/upload', file, data);
+        const startResponse = await this.uploadFile('/rfp/upload', file, data);
+
+        // If processing in background, poll for completion
+        if (startResponse.status === 'processing' && startResponse.job_id) {
+            return this.pollUploadStatus(startResponse.job_id, onProgress);
+        }
+
+        // Legacy: if server returned results directly (shouldn't happen with new API)
+        return startResponse;
+    },
+
+    async getUploadStatus(jobId) {
+        return this.request(`/rfp/upload/status/${jobId}`);
+    },
+
+    async pollUploadStatus(jobId, onProgress = null, pollInterval = 1000, maxWait = 300000) {
+        const startTime = Date.now();
+
+        while (Date.now() - startTime < maxWait) {
+            const status = await this.getUploadStatus(jobId);
+
+            // Report progress if callback provided
+            if (onProgress) {
+                onProgress({
+                    progress: status.progress || 0,
+                    message: status.message || 'Processing...'
+                });
+            }
+
+            // Check terminal states
+            if (status.status === 'completed') {
+                return status;  // Contains full results
+            }
+
+            if (status.status === 'failed') {
+                throw new Error(status.error || status.message || 'Upload processing failed');
+            }
+
+            // Wait before next poll
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+
+        throw new Error('Upload processing timed out');
     },
 
     async getRequests(sessionId) {
@@ -164,8 +206,71 @@ const API = {
     },
 
     // Analysis endpoints
-    async runAnalysis(sessionId) {
-        return this.request(`/analyze/${sessionId}`, { method: 'POST' });
+    async runAnalysis(sessionId, onProgress = null) {
+        // Start analysis (returns immediately with 202)
+        const startResponse = await this.request(`/analyze/${sessionId}`, { method: 'POST' });
+
+        // If already running, use existing job
+        if (startResponse.status === 'running' || startResponse.status === 'started') {
+            // Poll for completion
+            return this.pollAnalysisStatus(sessionId, onProgress);
+        }
+
+        // If completed synchronously (shouldn't happen with new API, but handle it)
+        if (startResponse.status === 'complete') {
+            return startResponse;
+        }
+
+        throw new Error(startResponse.error || 'Unexpected response from analysis endpoint');
+    },
+
+    async getAnalysisStatus(sessionId) {
+        return this.request(`/analyze/${sessionId}/status`);
+    },
+
+    async pollAnalysisStatus(sessionId, onProgress = null, pollInterval = 1500, maxWait = 600000) {
+        const startTime = Date.now();
+
+        while (Date.now() - startTime < maxWait) {
+            const status = await this.getAnalysisStatus(sessionId);
+
+            // Report progress if callback provided
+            if (onProgress && status.progress !== undefined) {
+                onProgress({
+                    progress: status.progress,
+                    completedChunks: status.completed_chunks,
+                    totalChunks: status.total_chunks,
+                    message: status.message
+                });
+            }
+
+            // Check terminal states
+            if (status.status === 'completed') {
+                return {
+                    status: 'complete',
+                    suggestions: status.suggestions,
+                    message: status.message
+                };
+            }
+
+            if (status.status === 'failed') {
+                throw new Error(status.analysis_error || status.message || 'Analysis failed');
+            }
+
+            // For idle status (no job found but analysis complete)
+            if (status.status === 'idle' && status.analysis_complete) {
+                return {
+                    status: 'complete',
+                    suggestions: {},
+                    message: 'Analysis already completed'
+                };
+            }
+
+            // Wait before next poll
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+
+        throw new Error('Analysis timed out');
     },
 
     // Generate endpoints

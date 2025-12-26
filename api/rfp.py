@@ -1,11 +1,16 @@
 import os
 import uuid
+import threading
+import logging
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
 from services.session_store import session_store
 from services.pdf_parser import parse_rfp, extract_first_page_text
 from services.claude_service import claude_service
+from services.job_manager import job_manager, JobStatus
 from config import Config
+
+logger = logging.getLogger(__name__)
 
 rfp_bp = Blueprint('rfp', __name__, url_prefix='/api/rfp')
 
@@ -42,10 +47,100 @@ def process_case_info(case_info: dict) -> dict:
     return case_info
 
 
+def process_rfp_background(job_id: str, session_id: str, file_path: str, filename: str):
+    """
+    Process RFP PDF in background thread.
+
+    Extracts requests using Claude and case info from first page.
+    Updates job progress as it goes.
+    """
+    import time
+    start_time = time.time()
+
+    logger.info(f"[{job_id}] Starting RFP processing for {filename}")
+
+    session = session_store.get(session_id)
+    if not session:
+        logger.error(f"[{job_id}] Session {session_id} not found")
+        job_manager.set_failed(job_id, "Session not found")
+        return
+
+    try:
+        # Step 1: Parse PDF to extract requests (this uses Claude)
+        logger.info(f"[{job_id}] Step 1: Extracting text from PDF...")
+        job_manager.update_progress(job_id, 0, "Reading PDF text...")
+
+        # First just read the PDF (fast)
+        from PyPDF2 import PdfReader
+        reader = PdfReader(file_path)
+        page_count = len(reader.pages)
+        logger.info(f"[{job_id}] PDF has {page_count} pages")
+        job_manager.update_progress(job_id, 0, f"PDF has {page_count} pages. Sending to Claude for extraction...")
+
+        # Now do the Claude extraction (slow part)
+        logger.info(f"[{job_id}] Calling Claude to extract requests...")
+        extract_start = time.time()
+
+        requests_list, parser_used = parse_rfp(file_path)
+
+        extract_time = time.time() - extract_start
+        logger.info(f"[{job_id}] Request extraction completed in {extract_time:.1f}s using {parser_used}")
+
+        if not requests_list:
+            logger.warning(f"[{job_id}] No requests found in PDF")
+            job_manager.set_failed(job_id, "Could not extract any requests from the PDF. The document may not be a standard RFP format.")
+            return
+
+        logger.info(f"[{job_id}] Found {len(requests_list)} requests")
+        job_manager.update_progress(job_id, 1, f"Found {len(requests_list)} requests! Extracting case info...")
+
+        # Step 2: Extract case info from first page
+        logger.info(f"[{job_id}] Step 2: Extracting case info from first page...")
+        case_info = None
+        try:
+            first_page_text = extract_first_page_text(file_path)
+            if first_page_text:
+                case_info_start = time.time()
+                case_info = claude_service.extract_case_info(first_page_text)
+                case_info = process_case_info(case_info)
+                case_info_time = time.time() - case_info_start
+                logger.info(f"[{job_id}] Case info extracted in {case_info_time:.1f}s")
+        except Exception as e:
+            logger.warning(f"[{job_id}] Case info extraction failed: {e}")
+            # Continue without case info - it can be extracted later
+
+        # Update session with results
+        session.rfp_filename = filename
+        session.rfp_file_path = file_path
+        session.requests = requests_list
+        session.case_info = case_info
+        session_store.update(session)
+
+        total_time = time.time() - start_time
+        logger.info(f"[{job_id}] RFP processing complete in {total_time:.1f}s")
+
+        # Mark job as complete with results
+        result = {
+            'session_id': session_id,
+            'rfp_filename': filename,
+            'total_requests': len(requests_list),
+            'parser_used': parser_used,
+            'requests': [r.to_dict() for r in requests_list],
+            'case_info': case_info
+        }
+        job_manager.set_completed(job_id, result)
+
+    except Exception as e:
+        logger.error(f"[{job_id}] RFP processing failed: {e}", exc_info=True)
+        job_manager.set_failed(job_id, str(e))
+
+
 @rfp_bp.route('/upload', methods=['POST'])
 def upload_rfp():
     """
     Upload and parse an RFP PDF.
+
+    Returns immediately with 202 Accepted. Use /upload/status/{job_id} to poll for completion.
 
     Expects multipart/form-data with:
     - file: The PDF file
@@ -82,50 +177,54 @@ def upload_rfp():
     file_path = os.path.join(session_upload_dir, unique_filename)
     file.save(file_path)
 
-    # Parse the PDF
-    try:
-        requests_list, parser_used = parse_rfp(file_path)
+    # Create job for background processing
+    job_id = f"upload_{uuid.uuid4().hex[:8]}"
+    job_manager.create_job(job_id, session.id, total_chunks=2)  # 2 steps: extract requests, extract case info
+    job_manager.set_running(job_id, 2, "Processing PDF...")
 
-        if not requests_list:
-            return jsonify({
-                'error': 'Could not extract any requests from the PDF',
-                'message': 'The document may not be a standard RFP format.',
-                'session_id': session.id
-            }), 422
+    # Start background processing
+    thread = threading.Thread(
+        target=process_rfp_background,
+        args=(job_id, session.id, file_path, filename),
+        daemon=True
+    )
+    thread.start()
 
-        # Extract case info from first page
-        case_info = None
-        try:
-            first_page_text = extract_first_page_text(file_path)
-            if first_page_text:
-                case_info = claude_service.extract_case_info(first_page_text)
-                case_info = process_case_info(case_info)
-        except Exception as e:
-            print(f"Case info extraction failed: {e}")
-            # Continue without case info - it can be extracted later
+    return jsonify({
+        'status': 'processing',
+        'job_id': job_id,
+        'session_id': session.id,
+        'message': 'PDF uploaded, processing in background...'
+    }), 202
 
-        # Update session
-        session.rfp_filename = filename
-        session.rfp_file_path = file_path
-        session.requests = requests_list
-        session.case_info = case_info
-        session_store.update(session)
 
-        return jsonify({
-            'session_id': session.id,
-            'rfp_filename': filename,
-            'total_requests': len(requests_list),
-            'parser_used': parser_used,
-            'requests': [r.to_dict() for r in requests_list],
-            'case_info': case_info
-        }), 200
+@rfp_bp.route('/upload/status/<job_id>', methods=['GET'])
+def get_upload_status(job_id):
+    """
+    Get the status of an RFP upload/processing job.
 
-    except Exception as e:
-        return jsonify({
-            'error': 'Failed to parse PDF',
-            'message': str(e),
-            'session_id': session.id
-        }), 500
+    Returns progress info while processing, full results when complete.
+    """
+    job = job_manager.get_job(job_id)
+
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+
+    response = {
+        'job_id': job_id,
+        'session_id': job.session_id,
+        'status': job.status.value,
+        'progress': job.progress,
+        'message': job.message
+    }
+
+    if job.status == JobStatus.COMPLETED and job.result:
+        # Include full results
+        response.update(job.result)
+    elif job.status == JobStatus.FAILED:
+        response['error'] = job.error
+
+    return jsonify(response)
 
 
 @rfp_bp.route('/<session_id>/requests', methods=['GET'])

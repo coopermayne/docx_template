@@ -3,9 +3,16 @@ from flask_cors import CORS
 from docxtpl import DocxTemplate
 import os
 import tempfile
+import logging
 from datetime import datetime
 
 from config import Config
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config.from_object(Config)
