@@ -299,6 +299,10 @@ const API = {
         return this.request('/templates');
     },
 
+    async getTemplateTypes() {
+        return this.request('/templates/types');
+    },
+
     async uploadTemplate(file, uploadedBy, type = 'rfp') {
         return this.uploadFile('/templates/upload', file, { uploaded_by: uploadedBy, type: type });
     },

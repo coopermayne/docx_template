@@ -147,6 +147,7 @@ def process_motion_info(motion_info: dict) -> dict:
         'motion_title': motion_info.get('motion_title', ''),
         'cert_of_compliance': motion_info.get('cert_of_compliance', False),
         'is_joint': False,  # Always defaults to False, user can toggle
+        'notice_and_confer': False,  # Always defaults to False, user can toggle
         'hearing_date': hearing_date,
         'hearing_time': hearing_time,
         'hearing_location': hearing_location,
@@ -176,6 +177,7 @@ def create_blank_session():
         'motion_title': '',
         'cert_of_compliance': False,
         'is_joint': False,
+        'notice_and_confer': False,
         'hearing_date': '',
         'hearing_time': '',
         'hearing_location': '',
@@ -314,7 +316,7 @@ def update_motion_session(session_id):
         }), 400
 
     # Validate boolean fields
-    bool_fields = ['multiple_plaintiffs', 'multiple_defendants', 'cert_of_compliance', 'is_joint']
+    bool_fields = ['multiple_plaintiffs', 'multiple_defendants', 'cert_of_compliance', 'is_joint', 'notice_and_confer']
     for field in bool_fields:
         if field in template_vars and not isinstance(template_vars[field], bool):
             return jsonify({
@@ -430,6 +432,7 @@ def generate_opposition(session_id):
             'associate_email': associate_email,
             'cert_of_compliance': template_vars.get('cert_of_compliance', False),
             'is_joint': template_vars.get('is_joint', False),
+            'notice_and_confer': template_vars.get('notice_and_confer', False),
             'hearing_date': hearing_date,
             'hearing_time': hearing_time,
             'hearing_location': hearing_location,

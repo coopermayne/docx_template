@@ -648,12 +648,11 @@
                                 </div>
                                 <!-- Motion Title -->
                                 <div class="info-row" style="display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem; align-items: center;">
-                                    <label style="color: var(--gray-500); font-size: 0.875rem;">Motion Title:<span style="color: #ef4444;">*</span></label>
+                                    <label style="color: var(--gray-500); font-size: 0.875rem;">Motion Title:</label>
                                     <input type="text"
                                            x-model="motionTemplateVars.motion_title"
                                            @blur="saveField('motion_title')"
                                            class="form-input"
-                                           :style="hasFieldError('motion_title') ? 'border-color: #ef4444; background-color: #fef2f2;' : ''"
                                            style="padding: 0.5rem; font-size: 0.875rem;"
                                            placeholder="Motion to Compel Discovery">
                                 </div>
@@ -726,7 +725,7 @@
                                     </button>
                                 </div>
                                 <!-- Document Options -->
-                                <div style="display: flex; gap: 1.5rem; margin-top: 0.5rem;">
+                                <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; margin-top: 0.5rem;">
                                     <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem;">
                                         <input type="checkbox"
                                                x-model="motionTemplateVars.is_joint"
@@ -740,6 +739,13 @@
                                                @change="saveField('cert_of_compliance')"
                                                style="width: 1rem; height: 1rem; cursor: pointer;">
                                         <span style="color: var(--gray-700);">Certificate of Compliance</span>
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem;">
+                                        <input type="checkbox"
+                                               x-model="motionTemplateVars.notice_and_confer"
+                                               @change="saveField('notice_and_confer')"
+                                               style="width: 1rem; height: 1rem; cursor: pointer;">
+                                        <span style="color: var(--gray-700);">Meet and Confer</span>
                                     </label>
                                 </div>
                             </div>
@@ -1653,7 +1659,7 @@
                     const v = this.motionTemplateVars;
                     // Check required fields are present
                     const hasRequired = v.court_name && v.case_number && v.plaintiff_caption &&
-                                       v.defendant_caption && v.judge_name && v.motion_title && this.documentTitle;
+                                       v.defendant_caption && v.judge_name && this.documentTitle;
                     // Check no validation errors
                     const hasNoErrors = Object.keys(this.fieldErrors).length === 0;
                     return hasRequired && hasNoErrors;
@@ -1667,7 +1673,6 @@
                     if (!v.plaintiff_caption) missing.push('Plaintiff Caption');
                     if (!v.defendant_caption) missing.push('Defendant Caption');
                     if (!v.judge_name) missing.push('Judge');
-                    if (!v.motion_title) missing.push('Motion Title');
                     if (!this.documentTitle) missing.push('Document Title');
                     // Also include validation errors
                     for (const [field, error] of Object.entries(this.fieldErrors)) {
@@ -1723,9 +1728,9 @@
                     // Clear previous error
                     delete this.fieldErrors[field];
 
-                    // Required field check (all except mag_judge_name and hearing fields)
-                    const optionalFields = ['mag_judge_name', 'hearing_date', 'hearing_time', 'hearing_location'];
-                    const requiredFields = ['court_name', 'case_number', 'plaintiff_caption', 'defendant_caption', 'judge_name', 'motion_title', 'documentTitle'];
+                    // Required field check (all except mag_judge_name, motion_title, and hearing fields)
+                    const optionalFields = ['mag_judge_name', 'motion_title', 'hearing_date', 'hearing_time', 'hearing_location'];
+                    const requiredFields = ['court_name', 'case_number', 'plaintiff_caption', 'defendant_caption', 'judge_name', 'documentTitle'];
 
                     if (requiredFields.includes(field) && !value.trim()) {
                         this.fieldErrors[field] = 'Required';
@@ -1752,7 +1757,7 @@
                 },
 
                 validateAllFields() {
-                    const fields = ['court_name', 'case_number', 'plaintiff_caption', 'defendant_caption', 'judge_name', 'motion_title', 'documentTitle'];
+                    const fields = ['court_name', 'case_number', 'plaintiff_caption', 'defendant_caption', 'judge_name', 'documentTitle'];
                     let allValid = true;
                     for (const field of fields) {
                         if (!this.validateField(field)) {
