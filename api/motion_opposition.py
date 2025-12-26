@@ -133,6 +133,13 @@ def process_motion_info(motion_info: dict) -> dict:
     if not filename:
         filename = generate_default_filename(motion_info.get('document_title', ''))
 
+    # Extract hearing info fields
+    hearing_date = motion_info.get('hearing_date', '')
+    hearing_time = motion_info.get('hearing_time', '')
+    hearing_location = motion_info.get('hearing_location', '')
+    # hearing_info is true only if all three fields are present
+    hearing_info = bool(hearing_date and hearing_time and hearing_location)
+
     return {
         'court_name': court_name,
         'plaintiff_caption': motion_info.get('plaintiff_caption', ''),
@@ -144,7 +151,12 @@ def process_motion_info(motion_info: dict) -> dict:
         'mag_judge_name': motion_info.get('mag_judge_name', ''),
         'motion_title': motion_info.get('motion_title', ''),
         'document_title': motion_info.get('document_title', 'Opposition to Motion'),
-        'filename': filename
+        'filename': filename,
+        'cert_of_compliance': motion_info.get('cert_of_compliance', False),
+        'hearing_date': hearing_date,
+        'hearing_time': hearing_time,
+        'hearing_location': hearing_location,
+        'hearing_info': hearing_info
     }
 
 
@@ -261,7 +273,7 @@ def update_motion_session(session_id):
         }), 400
 
     # Validate boolean fields
-    bool_fields = ['multiple_plaintiffs', 'multiple_defendants']
+    bool_fields = ['multiple_plaintiffs', 'multiple_defendants', 'cert_of_compliance']
     for field in bool_fields:
         if field in template_vars and not isinstance(template_vars[field], bool):
             return jsonify({
@@ -326,6 +338,12 @@ def generate_opposition(session_id):
         court_name = template_vars.get('court_name', '')
         court_name_for_word = court_name.replace('\n', '\a')
 
+        # Extract hearing fields and compute hearing_info
+        hearing_date = template_vars.get('hearing_date', '')
+        hearing_time = template_vars.get('hearing_time', '')
+        hearing_location = template_vars.get('hearing_location', '')
+        hearing_info = bool(hearing_date and hearing_time and hearing_location)
+
         context = {
             'court_name': court_name_for_word,
             'plaintiff_caption': template_vars.get('plaintiff_caption', ''),
@@ -338,7 +356,12 @@ def generate_opposition(session_id):
             'document_title': template_vars.get('document_title', ''),
             'associate_name': associate_name,
             'associate_bar': associate_bar,
-            'associate_email': associate_email
+            'associate_email': associate_email,
+            'cert_of_compliance': template_vars.get('cert_of_compliance', False),
+            'hearing_date': hearing_date,
+            'hearing_time': hearing_time,
+            'hearing_location': hearing_location,
+            'hearing_info': hearing_info
         }
 
         # Render template

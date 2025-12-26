@@ -339,9 +339,25 @@ class ClaudeService:
                 "filename": {
                     "type": "string",
                     "description": "Generated filename for the opposition document using standard legal abbreviations (e.g., '2025.01.15 Opp MTD', '2025.01.15 Opp MSJ')"
+                },
+                "cert_of_compliance": {
+                    "type": "boolean",
+                    "description": "True if the case is in the Central District of California (federal court), false otherwise. This controls whether a certificate of compliance section referencing C.D. Cal. local rules is included."
+                },
+                "hearing_date": {
+                    "type": "string",
+                    "description": "The hearing date if specified in the motion (e.g., 'January 15, 2025', 'February 3, 2025'). Empty string if not found."
+                },
+                "hearing_time": {
+                    "type": "string",
+                    "description": "The hearing time if specified in the motion (e.g., '10:00 a.m.', '2:30 p.m.'). Empty string if not found."
+                },
+                "hearing_location": {
+                    "type": "string",
+                    "description": "The courtroom or location for the hearing if specified (e.g., 'Courtroom 10A', '350'). Empty string if not found."
                 }
             },
-            "required": ["court_name", "plaintiff_caption", "defendant_caption", "multiple_plaintiffs", "multiple_defendants", "case_number", "judge_name", "mag_judge_name", "motion_title", "document_title", "filename"]
+            "required": ["court_name", "plaintiff_caption", "defendant_caption", "multiple_plaintiffs", "multiple_defendants", "case_number", "judge_name", "mag_judge_name", "motion_title", "document_title", "filename", "cert_of_compliance", "hearing_date", "hearing_time", "hearing_location"]
         }
     }
 
@@ -628,6 +644,14 @@ Extract the following information from the motion document. These fields will be
 
 11. **filename**: Generate a filename for the opposition document using today's date ({today_date}) and standard legal abbreviations.
 
+12. **cert_of_compliance**: True if this is a federal case in the Central District of California, false otherwise. Look for "CENTRAL DISTRICT OF CALIFORNIA" in the court_name. This controls whether local rules compliance language is included.
+
+13. **hearing_date**: The hearing date if specified (e.g., "January 15, 2025"). Look for "Hearing Date:", "Date:", or similar. Empty string if not found.
+
+14. **hearing_time**: The hearing time if specified (e.g., "10:00 a.m."). Look for "Hearing Time:", "Time:", or similar. Empty string if not found.
+
+15. **hearing_location**: The courtroom or location for the hearing if specified (e.g., "Courtroom 10A", "350"). Look for "Courtroom:", "Crtrm:", "Location:", or similar. Empty string if not found.
+
 ## Filename Generation Rules:
 - Format: [date] Opp [motion abbreviation]
 - Date format: yyyy.mm.dd (today is {today_date})
@@ -672,6 +696,11 @@ Call the submit_motion_info tool with the extracted information.
                 if block.type == "tool_use" and block.name == "submit_motion_info":
                     result = block.input
                     # Ensure all expected keys exist with defaults
+                    hearing_date = result.get("hearing_date", "")
+                    hearing_time = result.get("hearing_time", "")
+                    hearing_location = result.get("hearing_location", "")
+                    # hearing_info is true only if all three hearing fields are present
+                    hearing_info = bool(hearing_date and hearing_time and hearing_location)
                     return {
                         "court_name": result.get("court_name", ""),
                         "plaintiff_caption": result.get("plaintiff_caption", ""),
@@ -683,7 +712,12 @@ Call the submit_motion_info tool with the extracted information.
                         "mag_judge_name": result.get("mag_judge_name", ""),
                         "motion_title": result.get("motion_title", ""),
                         "document_title": result.get("document_title", ""),
-                        "filename": result.get("filename", "")
+                        "filename": result.get("filename", ""),
+                        "cert_of_compliance": result.get("cert_of_compliance", False),
+                        "hearing_date": hearing_date,
+                        "hearing_time": hearing_time,
+                        "hearing_location": hearing_location,
+                        "hearing_info": hearing_info
                     }
 
             # Fallback if no tool use found
@@ -715,7 +749,12 @@ Call the submit_motion_info tool with the extracted information.
             "mag_judge_name": "",
             "motion_title": "",
             "document_title": "Opposition to Motion",
-            "filename": f"{today_date} Opp"
+            "filename": f"{today_date} Opp",
+            "cert_of_compliance": False,
+            "hearing_date": "",
+            "hearing_time": "",
+            "hearing_location": "",
+            "hearing_info": False
         }
 
         text_upper = text.upper()
@@ -743,6 +782,10 @@ Call the submit_motion_info tool with the extracted information.
             if match:
                 result["court_name"] = match.group(1).strip()
                 break
+
+        # Check if Central District of California for cert_of_compliance
+        if "CENTRAL DISTRICT OF CALIFORNIA" in text_upper:
+            result["cert_of_compliance"] = True
 
         # Try to extract motion title and generate document_title
         motion_patterns = [
