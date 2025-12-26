@@ -796,7 +796,7 @@
                     <div class="actions-bar">
                         <button class="btn btn-secondary" @click="clearMotion()">Start Over</button>
                         <button class="btn btn-success"
-                                @click="generateDocument()"
+                                @click="generateMotionDocument()"
                                 :disabled="motionGenerating || !currentUser || !canGenerateDocument()"
                                 :title="!currentUser ? 'Please sign in first' : (!canGenerateDocument() ? 'Missing: ' + getMissingRequiredFields().join(', ') : 'Generate document')"
                                 style="font-size: 1rem; padding: 0.75rem 1.5rem;">
@@ -1877,7 +1877,7 @@
                     }
                 },
 
-                async generateDocument() {
+                async generateMotionDocument() {
                     if (!this.currentUser) {
                         this.motionError = 'Please sign in to generate documents';
                         return;
