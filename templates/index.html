@@ -23,7 +23,7 @@
                     <a class="nav-btn" :class="{ 'active': currentPage === 'motion_opposition' }" href="#motion-opposition" @click="navigateTo('motion_opposition')">
                         Document Generator
                     </a>
-                    <a class="nav-btn" :class="{ 'active': currentPage === 'templates' }" href="#templates" @click="navigateTo('templates')">
+                    <a x-show="currentUser?.name === 'Cooper Alison-Mayne'" class="nav-btn" :class="{ 'active': currentPage === 'templates' }" href="#templates" @click="navigateTo('templates')">
                         Manage Templates
                     </a>
                     <div class="user-selector" style="margin-left: 1rem; position: relative;">
@@ -116,26 +116,6 @@
                         </p>
                         <span style="color: var(--primary); font-weight: 500; display: flex; align-items: center; gap: 0.5rem;">
                             Get Started <span style="font-size: 1.2em;">→</span>
-                        </span>
-                    </div>
-
-                    <!-- Templates Card -->
-                    <div class="card feature-card" style="cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;"
-                         @click="navigateTo('templates')"
-                         @mouseenter="$el.style.transform = 'translateY(-4px)'; $el.style.boxShadow = '0 12px 24px rgba(0,0,0,0.1)'"
-                         @mouseleave="$el.style.transform = ''; $el.style.boxShadow = ''">
-                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-                            <div style="width: 48px; height: 48px; background: #d1fae5; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
-                                📄
-                            </div>
-                            <h3 style="margin: 0; font-size: 1.25rem; color: var(--gray-900);">Manage Templates</h3>
-                        </div>
-                        <p style="color: var(--gray-600); margin: 0 0 1rem 0; line-height: 1.6;">
-                            Upload and manage your Word document templates. Customize the output format for RFP responses,
-                            oppositions, and other document types.
-                        </p>
-                        <span style="color: var(--primary); font-weight: 500; display: flex; align-items: center; gap: 0.5rem;">
-                            Manage Templates <span style="font-size: 1.2em;">→</span>
                         </span>
                     </div>
                 </div>
@@ -745,6 +725,23 @@
                                         </template>
                                     </button>
                                 </div>
+                                <!-- Document Options -->
+                                <div style="display: flex; gap: 1.5rem; margin-top: 0.5rem;">
+                                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem;">
+                                        <input type="checkbox"
+                                               x-model="motionTemplateVars.is_joint"
+                                               @change="saveField('is_joint')"
+                                               style="width: 1rem; height: 1rem; cursor: pointer;">
+                                        <span style="color: var(--gray-700);">Joint Filing</span>
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem;">
+                                        <input type="checkbox"
+                                               x-model="motionTemplateVars.cert_of_compliance"
+                                               @change="saveField('cert_of_compliance')"
+                                               style="width: 1rem; height: 1rem; cursor: pointer;">
+                                        <span style="color: var(--gray-700);">Certificate of Compliance</span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
 
@@ -897,8 +894,8 @@
                 </div>
             </div><!-- End Manage Users Page -->
 
-            <!-- Manage Templates Page -->
-            <div x-show="currentPage === 'templates'">
+            <!-- Manage Templates Page (admin only) -->
+            <div x-show="currentPage === 'templates' && currentUser?.name === 'Cooper Alison-Mayne'">
                 <div style="margin-top: 1.5rem;">
                     <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--gray-900); margin-bottom: 0.5rem;">Manage Templates</h2>
                     <p style="color: var(--gray-600); margin-bottom: 2rem;">
@@ -928,94 +925,60 @@
                     </div>
 
                     <div x-show="!templatesLoading">
-                        <!-- RFP Templates Section -->
-                        <div class="template-section" style="margin-bottom: 2.5rem;">
-                            <h3 style="font-size: 1.125rem; font-weight: 600; color: var(--gray-800); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
-                                <span style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: #dbeafe; border-radius: 6px;">📋</span>
-                                RFP Response Templates
-                            </h3>
-                            <div class="template-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
-                                <!-- Existing RFP templates -->
-                                <template x-for="template in templates.filter(t => t.type === 'rfp')" :key="template.id">
-                                    <div class="template-tile">
-                                        <div class="template-tile-header">
-                                            <span style="font-size: 1.5rem;">📄</span>
-                                            <div style="flex: 1; min-width: 0;">
-                                                <div style="font-weight: 500; color: var(--gray-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" x-text="template.name"></div>
-                                                <div style="font-size: 0.75rem; color: var(--gray-500);">
-                                                    <span x-text="getInitials(template.uploaded_by_name)"></span> · <span x-text="formatDate(template.created_at)"></span>
+                        <!-- Dynamic Template Sections -->
+                        <template x-for="typeInfo in templateTypes" :key="typeInfo">
+                            <div class="template-section" style="margin-bottom: 2.5rem;">
+                                <h3 style="font-size: 1.125rem; font-weight: 600; color: var(--gray-800); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                    <span style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px;"
+                                          :style="{ background: getCategoryColor(typeInfo) }"
+                                          x-text="getCategoryIcon(typeInfo)"></span>
+                                    <span x-text="formatCategoryName(typeInfo)"></span> Templates
+                                </h3>
+                                <div class="template-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+                                    <!-- Existing templates for this type -->
+                                    <template x-for="template in templates.filter(t => t.type === typeInfo)" :key="template.id">
+                                        <div class="template-tile">
+                                            <div class="template-tile-header">
+                                                <span style="font-size: 1.5rem;">📄</span>
+                                                <div style="flex: 1; min-width: 0;">
+                                                    <div style="font-weight: 500; color: var(--gray-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" x-text="template.name"></div>
+                                                    <div style="font-size: 0.75rem; color: var(--gray-500);">
+                                                        <span x-text="getInitials(template.uploaded_by_name)"></span> · <span x-text="formatDate(template.created_at)"></span>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                        <div class="template-tile-actions" x-show="currentUser">
-                                            <button class="btn btn-sm btn-secondary" @click="downloadTemplate(template)">Download</button>
-                                            <button class="btn btn-sm btn-danger" @click="confirmDeleteTemplate(template)">Delete</button>
-                                        </div>
-                                    </div>
-                                </template>
-
-                                <!-- Upload dropzone tile for RFP -->
-                                <div class="template-tile template-upload-tile"
-                                     :class="{ 'dragover': rfpDragging, 'disabled': !currentUser }"
-                                     x-show="currentUser"
-                                     @click="templateUploadType = 'rfp'; $refs.templateInput.click()"
-                                     @dragover.prevent="rfpDragging = true"
-                                     @dragleave.prevent="rfpDragging = false"
-                                     @drop.prevent="handleTemplateDropForType($event, 'rfp')">
-                                    <div style="text-align: center; color: var(--gray-400);">
-                                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">+</div>
-                                        <div style="font-size: 0.875rem;" x-text="rfpUploading ? 'Uploading...' : 'Drop or click to upload'"></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div x-show="templates.filter(t => t.type === 'rfp').length === 0 && !currentUser" style="color: var(--gray-500); font-size: 0.875rem; padding: 1rem; background: var(--gray-50); border-radius: 8px; text-align: center;">
-                                No RFP templates uploaded yet.
-                            </div>
-                        </div>
-
-                        <!-- Opposition Templates Section -->
-                        <div class="template-section">
-                            <h3 style="font-size: 1.125rem; font-weight: 600; color: var(--gray-800); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
-                                <span style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: #fef3c7; border-radius: 6px;">⚖️</span>
-                                Motion Opposition Templates
-                            </h3>
-                            <div class="template-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
-                                <!-- Existing Opposition templates -->
-                                <template x-for="template in templates.filter(t => t.type === 'opposition')" :key="template.id">
-                                    <div class="template-tile">
-                                        <div class="template-tile-header">
-                                            <span style="font-size: 1.5rem;">📄</span>
-                                            <div style="flex: 1; min-width: 0;">
-                                                <div style="font-weight: 500; color: var(--gray-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" x-text="template.name"></div>
-                                                <div style="font-size: 0.75rem; color: var(--gray-500);">
-                                                    <span x-text="getInitials(template.uploaded_by_name)"></span> · <span x-text="formatDate(template.created_at)"></span>
-                                                </div>
+                                            <div class="template-tile-actions" x-show="currentUser">
+                                                <button class="btn btn-sm btn-secondary" @click="downloadTemplate(template)">Download</button>
+                                                <button class="btn btn-sm btn-danger" @click="confirmDeleteTemplate(template)">Delete</button>
                                             </div>
                                         </div>
-                                        <div class="template-tile-actions" x-show="currentUser">
-                                            <button class="btn btn-sm btn-secondary" @click="downloadTemplate(template)">Download</button>
-                                            <button class="btn btn-sm btn-danger" @click="confirmDeleteTemplate(template)">Delete</button>
+                                    </template>
+
+                                    <!-- Upload dropzone tile -->
+                                    <div class="template-tile template-upload-tile"
+                                         :class="{ 'dragover': templateDragStates[typeInfo], 'disabled': !currentUser }"
+                                         x-show="currentUser"
+                                         @click="templateUploadType = typeInfo; $refs.templateInput.click()"
+                                         @dragover.prevent="templateDragStates[typeInfo] = true"
+                                         @dragleave.prevent="templateDragStates[typeInfo] = false"
+                                         @drop.prevent="handleTemplateDropForType($event, typeInfo)">
+                                        <div style="text-align: center; color: var(--gray-400);">
+                                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">+</div>
+                                            <div style="font-size: 0.875rem;" x-text="templateUploadStates[typeInfo] ? 'Uploading...' : 'Drop or click to upload'"></div>
                                         </div>
                                     </div>
-                                </template>
-
-                                <!-- Upload dropzone tile for Opposition -->
-                                <div class="template-tile template-upload-tile"
-                                     :class="{ 'dragover': oppositionDragging, 'disabled': !currentUser }"
-                                     x-show="currentUser"
-                                     @click="templateUploadType = 'opposition'; $refs.templateInput.click()"
-                                     @dragover.prevent="oppositionDragging = true"
-                                     @dragleave.prevent="oppositionDragging = false"
-                                     @drop.prevent="handleTemplateDropForType($event, 'opposition')">
-                                    <div style="text-align: center; color: var(--gray-400);">
-                                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">+</div>
-                                        <div style="font-size: 0.875rem;" x-text="oppositionUploading ? 'Uploading...' : 'Drop or click to upload'"></div>
-                                    </div>
+                                </div>
+                                <div x-show="templates.filter(t => t.type === typeInfo).length === 0 && !currentUser" style="color: var(--gray-500); font-size: 0.875rem; padding: 1rem; background: var(--gray-50); border-radius: 8px; text-align: center;">
+                                    No <span x-text="formatCategoryName(typeInfo).toLowerCase()"></span> templates uploaded yet.
                                 </div>
                             </div>
-                            <div x-show="templates.filter(t => t.type === 'opposition').length === 0 && !currentUser" style="color: var(--gray-500); font-size: 0.875rem; padding: 1rem; background: var(--gray-50); border-radius: 8px; text-align: center;">
-                                No opposition templates uploaded yet.
-                            </div>
+                        </template>
+
+                        <!-- Add New Category Button -->
+                        <div x-show="currentUser" style="margin-top: 1rem;">
+                            <button class="btn btn-secondary" @click="showNewCategoryModal = true" style="display: flex; align-items: center; gap: 0.5rem;">
+                                <span style="font-size: 1.25rem;">+</span> Add New Category
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1035,6 +998,38 @@
                     <div class="modal-footer">
                         <button class="btn btn-secondary" @click="deletingTemplate = null">Cancel</button>
                         <button class="btn btn-danger" @click="deleteTemplate()">Delete</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- New Category Modal -->
+            <div x-show="showNewCategoryModal" class="modal-overlay" @click.self="showNewCategoryModal = false; newCategoryName = ''">
+                <div class="modal" style="max-width: 400px;">
+                    <div class="modal-header">
+                        <h3>Add New Category</h3>
+                        <button class="btn-icon" @click="showNewCategoryModal = false; newCategoryName = ''">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label for="newCategoryName">Category Name</label>
+                            <input type="text"
+                                   id="newCategoryName"
+                                   x-model="newCategoryName"
+                                   placeholder="e.g., discovery, motion, pleading"
+                                   @keydown.enter="createNewCategory()"
+                                   style="width: 100%;">
+                            <small style="color: var(--gray-500); display: block; margin-top: 0.25rem;">
+                                Use lowercase letters, numbers, hyphens, or underscores only.
+                            </small>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" @click="showNewCategoryModal = false; newCategoryName = ''">Cancel</button>
+                        <button class="btn btn-primary"
+                                @click="createNewCategory()"
+                                :disabled="!newCategoryName.trim()">
+                            Create & Upload Template
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1246,14 +1241,15 @@
 
                 // Templates state
                 templates: [],
+                templateTypes: [],
                 templatesLoading: false,
                 templatesError: null,
                 deletingTemplate: null,
                 templateUploadType: 'rfp',
-                rfpDragging: false,
-                oppositionDragging: false,
-                rfpUploading: false,
-                oppositionUploading: false,
+                templateDragStates: {},  // { type: boolean } for drag states
+                templateUploadStates: {}, // { type: boolean } for upload states
+                showNewCategoryModal: false,
+                newCategoryName: '',
 
                 async init() {
                     // Load objection presets
@@ -2107,8 +2103,13 @@
                     this.templatesLoading = true;
                     this.templatesError = null;
                     try {
-                        const data = await API.getTemplates();
-                        this.templates = data.templates || [];
+                        // Load templates and types in parallel
+                        const [templatesData, typesData] = await Promise.all([
+                            API.getTemplates(),
+                            API.getTemplateTypes()
+                        ]);
+                        this.templates = templatesData.templates || [];
+                        this.templateTypes = typesData.types || ['rfp', 'opposition'];
                     } catch (e) {
                         this.templatesError = e.message;
                     } finally {
@@ -2127,9 +2128,8 @@
                 },
 
                 async handleTemplateDropForType(event, type) {
-                    // Reset drag states
-                    this.rfpDragging = false;
-                    this.oppositionDragging = false;
+                    // Reset all drag states
+                    this.templateDragStates = {};
 
                     const files = event.dataTransfer.files;
                     if (files.length === 0) return;
@@ -2145,11 +2145,7 @@
                     }
 
                     // Set uploading state for the correct section
-                    if (type === 'rfp') {
-                        this.rfpUploading = true;
-                    } else {
-                        this.oppositionUploading = true;
-                    }
+                    this.templateUploadStates[type] = true;
                     this.templatesError = null;
 
                     try {
@@ -2158,8 +2154,7 @@
                     } catch (e) {
                         this.templatesError = e.message;
                     } finally {
-                        this.rfpUploading = false;
-                        this.oppositionUploading = false;
+                        this.templateUploadStates[type] = false;
                     }
                 },
 
@@ -2195,6 +2190,66 @@
                     } catch (e) {
                         this.templatesError = e.message;
                     }
+                },
+
+                // Category helper methods
+                getCategoryIcon(type) {
+                    const icons = {
+                        'rfp': '📋',
+                        'opposition': '⚖️',
+                        'discovery': '🔍',
+                        'motion': '📝',
+                        'pleading': '📜',
+                        'brief': '📑'
+                    };
+                    return icons[type] || '📄';
+                },
+
+                getCategoryColor(type) {
+                    const colors = {
+                        'rfp': '#dbeafe',
+                        'opposition': '#fef3c7',
+                        'discovery': '#dcfce7',
+                        'motion': '#f3e8ff',
+                        'pleading': '#ffe4e6',
+                        'brief': '#e0e7ff'
+                    };
+                    return colors[type] || '#f3f4f6';
+                },
+
+                formatCategoryName(type) {
+                    // Convert type to display name (e.g., "rfp" -> "RFP", "motion-opposition" -> "Motion Opposition")
+                    if (type === 'rfp') return 'RFP Response';
+                    if (type === 'opposition') return 'Motion Opposition';
+                    return type
+                        .split(/[-_]/)
+                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join(' ');
+                },
+
+                createNewCategory() {
+                    const categoryName = this.newCategoryName.trim().toLowerCase().replace(/\s+/g, '-');
+                    if (!categoryName) return;
+
+                    // Validate category name
+                    if (!/^[a-z0-9_-]+$/.test(categoryName)) {
+                        this.templatesError = 'Category name can only contain lowercase letters, numbers, hyphens, and underscores';
+                        return;
+                    }
+
+                    // Check if category already exists
+                    if (this.templateTypes.includes(categoryName)) {
+                        this.templatesError = 'This category already exists';
+                        return;
+                    }
+
+                    // Set the type and trigger file upload
+                    this.templateUploadType = categoryName;
+                    this.showNewCategoryModal = false;
+                    this.newCategoryName = '';
+
+                    // Trigger file input
+                    this.$refs.templateInput.click();
                 },
 
                 formatDate(dateStr) {

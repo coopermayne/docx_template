@@ -146,6 +146,7 @@ def process_motion_info(motion_info: dict) -> dict:
         'mag_judge_name': motion_info.get('mag_judge_name', ''),
         'motion_title': motion_info.get('motion_title', ''),
         'cert_of_compliance': motion_info.get('cert_of_compliance', False),
+        'is_joint': False,  # Always defaults to False, user can toggle
         'hearing_date': hearing_date,
         'hearing_time': hearing_time,
         'hearing_location': hearing_location,
@@ -174,6 +175,7 @@ def create_blank_session():
         'mag_judge_name': '',
         'motion_title': '',
         'cert_of_compliance': False,
+        'is_joint': False,
         'hearing_date': '',
         'hearing_time': '',
         'hearing_location': '',
@@ -312,7 +314,7 @@ def update_motion_session(session_id):
         }), 400
 
     # Validate boolean fields
-    bool_fields = ['multiple_plaintiffs', 'multiple_defendants', 'cert_of_compliance']
+    bool_fields = ['multiple_plaintiffs', 'multiple_defendants', 'cert_of_compliance', 'is_joint']
     for field in bool_fields:
         if field in template_vars and not isinstance(template_vars[field], bool):
             return jsonify({
@@ -386,14 +388,14 @@ def generate_opposition(session_id):
         return jsonify({'error': 'Associate name is required'}), 400
 
     # Try to get uploaded template, fall back to local file
-    uploaded_template_path = get_latest_template_path('opposition')
+    uploaded_template_path = get_latest_template_path('pleading')
     template_path = uploaded_template_path or FALLBACK_TEMPLATE_PATH
 
     # Check template exists
     if not os.path.exists(template_path):
         return jsonify({
             'error': 'Template not found',
-            'message': 'No opposition template uploaded and no fallback template available.'
+            'message': 'No pleading template uploaded and no fallback template available.'
         }), 500
 
     try:
@@ -427,6 +429,7 @@ def generate_opposition(session_id):
             'associate_bar': associate_bar,
             'associate_email': associate_email,
             'cert_of_compliance': template_vars.get('cert_of_compliance', False),
+            'is_joint': template_vars.get('is_joint', False),
             'hearing_date': hearing_date,
             'hearing_time': hearing_time,
             'hearing_location': hearing_location,

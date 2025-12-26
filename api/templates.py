@@ -12,7 +12,8 @@ templates_bp = Blueprint('templates', __name__, url_prefix='/api/templates')
 
 BUCKET_NAME = 'templates'
 TABLE_NAME = 'templates'
-VALID_TYPES = ['rfp', 'opposition']
+# Default types shown even when no templates exist
+DEFAULT_TYPES = ['rfp', 'pleading']
 
 
 @templates_bp.route('', methods=['GET'])
@@ -28,7 +29,7 @@ def list_templates():
 
     # Optional type filter
     template_type = request.args.get('type')
-    if template_type and template_type in VALID_TYPES:
+    if template_type:
         filters['type'] = f'eq.{template_type}'
 
     # Get templates with user info
@@ -59,6 +60,29 @@ def list_templates():
     return jsonify({'templates': templates}), 200
 
 
+@templates_bp.route('/types', methods=['GET'])
+def list_template_types():
+    """List all unique template types (categories)."""
+    supabase = get_supabase()
+
+    if not supabase.enabled:
+        return jsonify({'types': DEFAULT_TYPES}), 200
+
+    # Get all templates to extract unique types
+    data, status = supabase.select(TABLE_NAME, columns='type')
+
+    if status >= 400:
+        return jsonify({'types': DEFAULT_TYPES}), 200
+
+    # Extract unique types from templates
+    existing_types = set(t.get('type', 'rfp') for t in (data or []))
+
+    # Combine with default types and sort
+    all_types = sorted(set(DEFAULT_TYPES) | existing_types)
+
+    return jsonify({'types': all_types}), 200
+
+
 @templates_bp.route('/upload', methods=['POST'])
 def upload_template():
     """Upload a new template."""
@@ -83,8 +107,11 @@ def upload_template():
     if not uploaded_by:
         return jsonify({'error': 'uploaded_by is required'}), 400
 
-    if template_type not in VALID_TYPES:
-        return jsonify({'error': f'Invalid type. Must be one of: {", ".join(VALID_TYPES)}'}), 400
+    # Validate type: must be non-empty, alphanumeric with underscores/hyphens, max 50 chars
+    if not template_type or len(template_type) > 50:
+        return jsonify({'error': 'Type is required and must be 50 characters or less'}), 400
+    if not all(c.isalnum() or c in '_-' for c in template_type):
+        return jsonify({'error': 'Type can only contain letters, numbers, underscores, and hyphens'}), 400
 
     # Generate unique storage path
     filename = secure_filename(file.filename)
