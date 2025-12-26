@@ -1595,7 +1595,14 @@
                     this.error = null;
 
                     try {
-                        const { blob, filename } = await API.generateResponse(this.session.id, includeReasoning);
+                        // Pass current user info for template variables
+                        const associateInfo = this.currentUser ? {
+                            associate_name: this.currentUser.name,
+                            associate_bar: this.currentUser.bar_number,
+                            associate_email: this.currentUser.email
+                        } : {};
+
+                        const { blob, filename } = await API.generateResponse(this.session.id, includeReasoning, associateInfo);
 
                         // Download the file
                         const url = window.URL.createObjectURL(blob);
