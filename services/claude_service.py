@@ -332,14 +332,6 @@ class ClaudeService:
                     "type": "string",
                     "description": "The title of the original motion being opposed, exactly as it appears (e.g., 'Motion to Compel Discovery', 'Motion for Summary Judgment')"
                 },
-                "document_title": {
-                    "type": "string",
-                    "description": "The title for our opposition document (e.g., 'Opposition to Motion to Compel Discovery', 'Opposition to Motion for Summary Judgment')"
-                },
-                "filename": {
-                    "type": "string",
-                    "description": "Generated filename for the opposition document using standard legal abbreviations (e.g., '2025.01.15 Opp MTD', '2025.01.15 Opp MSJ')"
-                },
                 "cert_of_compliance": {
                     "type": "boolean",
                     "description": "True if the case is in the Central District of California (federal court), false otherwise. This controls whether a certificate of compliance section referencing C.D. Cal. local rules is included."
@@ -357,7 +349,7 @@ class ClaudeService:
                     "description": "The courtroom or location for the hearing if specified (e.g., 'Courtroom 10A', '350'). Empty string if not found."
                 }
             },
-            "required": ["court_name", "plaintiff_caption", "defendant_caption", "multiple_plaintiffs", "multiple_defendants", "case_number", "judge_name", "mag_judge_name", "motion_title", "document_title", "filename", "cert_of_compliance", "hearing_date", "hearing_time", "hearing_location"]
+            "required": ["court_name", "plaintiff_caption", "defendant_caption", "multiple_plaintiffs", "multiple_defendants", "case_number", "judge_name", "mag_judge_name", "motion_title", "cert_of_compliance", "hearing_date", "hearing_time", "hearing_location"]
         }
     }
 
@@ -595,13 +587,10 @@ Call the submit_case_info tool with the extracted information.
             Dictionary with extracted motion information matching template fields:
             - court_name, plaintiff_caption, defendant_caption, multiple_plaintiffs,
             - multiple_defendants, case_number, judge_name, mag_judge_name,
-            - document_title, filename
+            - motion_title, cert_of_compliance, hearing_date, hearing_time, hearing_location
         """
         if not self.is_available():
             return self._fallback_extract_motion_info(two_page_text)
-
-        from datetime import datetime
-        today_date = datetime.now().strftime('%Y.%m.%d')
 
         prompt = f"""You are a legal assistant extracting information from a motion document filed in court to generate an opposition document.
 
@@ -640,43 +629,13 @@ Extract the following information from the motion document. These fields will be
 
 9. **motion_title**: The title of the original motion being opposed, exactly as it appears (e.g., "Motion to Compel Discovery", "Motion for Summary Judgment").
 
-10. **document_title**: Generate the title for our opposition document based on the motion being opposed (e.g., "Opposition to Motion to Compel Discovery", "Opposition to Motion for Summary Judgment").
+10. **cert_of_compliance**: True if this is a federal case in the Central District of California, false otherwise. Look for "CENTRAL DISTRICT OF CALIFORNIA" in the court_name. This controls whether local rules compliance language is included.
 
-11. **filename**: Generate a filename for the opposition document using today's date ({today_date}) and standard legal abbreviations.
+11. **hearing_date**: The hearing date if specified (e.g., "January 15, 2025"). Look for "Hearing Date:", "Date:", or similar. Empty string if not found.
 
-12. **cert_of_compliance**: True if this is a federal case in the Central District of California, false otherwise. Look for "CENTRAL DISTRICT OF CALIFORNIA" in the court_name. This controls whether local rules compliance language is included.
+12. **hearing_time**: The hearing time if specified (e.g., "10:00 a.m."). Look for "Hearing Time:", "Time:", or similar. Empty string if not found.
 
-13. **hearing_date**: The hearing date if specified (e.g., "January 15, 2025"). Look for "Hearing Date:", "Date:", or similar. Empty string if not found.
-
-14. **hearing_time**: The hearing time if specified (e.g., "10:00 a.m."). Look for "Hearing Time:", "Time:", or similar. Empty string if not found.
-
-15. **hearing_location**: The courtroom or location for the hearing if specified (e.g., "Courtroom 10A", "350"). Look for "Courtroom:", "Crtrm:", "Location:", or similar. Empty string if not found.
-
-## Filename Generation Rules:
-- Format: [date] Opp [motion abbreviation]
-- Date format: yyyy.mm.dd (today is {today_date})
-- Do NOT use periods in abbreviations (use "Ans" not "Ans.")
-- Do NOT include the case name (file will be in the case folder)
-
-## Standard Abbreviations:
-| Motion Type | Abbreviation |
-|-------------|--------------|
-| Motion to Dismiss | MTD |
-| Motion for Summary Judgment | MSJ |
-| Motion in Limine | MIL |
-| Motion to Compel | Mot to Compel |
-| Motion to Compel Discovery | Mot to Compel Disc |
-| Motion to Compel Arbitration | Mot to Compel Arb |
-| Motion to Strike | Mot to Strike |
-| Motion to Remand | Mot to Remand |
-| Motion for Reconsideration | Mot Recons |
-| Motion for Sanctions | Mot Sanctions |
-
-## Filename Examples:
-- Opposition to Motion to Dismiss → "{today_date} Opp MTD"
-- Opposition to Motion for Summary Judgment → "{today_date} Opp MSJ"
-- Opposition to Motion to Compel Discovery → "{today_date} Opp Mot to Compel Disc"
-- Opposition to Motion in Limine → "{today_date} Opp MIL"
+13. **hearing_location**: The courtroom or location for the hearing if specified (e.g., "Courtroom 10A", "350"). Look for "Courtroom:", "Crtrm:", "Location:", or similar. Empty string if not found.
 
 CRITICAL: Only provide information you can extract from the document. Leave fields as empty strings rather than guessing.
 
@@ -711,8 +670,6 @@ Call the submit_motion_info tool with the extracted information.
                         "judge_name": result.get("judge_name", ""),
                         "mag_judge_name": result.get("mag_judge_name", ""),
                         "motion_title": result.get("motion_title", ""),
-                        "document_title": result.get("document_title", ""),
-                        "filename": result.get("filename", ""),
                         "cert_of_compliance": result.get("cert_of_compliance", False),
                         "hearing_date": hearing_date,
                         "hearing_time": hearing_time,
@@ -735,9 +692,6 @@ Call the submit_motion_info tool with the extracted information.
         """Fallback extraction for motion info when Claude is unavailable."""
         import re
 
-        from datetime import datetime
-        today_date = datetime.now().strftime('%Y.%m.%d')
-
         result = {
             "court_name": "",
             "plaintiff_caption": "",
@@ -748,8 +702,6 @@ Call the submit_motion_info tool with the extracted information.
             "judge_name": "",
             "mag_judge_name": "",
             "motion_title": "",
-            "document_title": "Opposition to Motion",
-            "filename": f"{today_date} Opp",
             "cert_of_compliance": False,
             "hearing_date": "",
             "hearing_time": "",
@@ -787,7 +739,7 @@ Call the submit_motion_info tool with the extracted information.
         if "CENTRAL DISTRICT OF CALIFORNIA" in text_upper:
             result["cert_of_compliance"] = True
 
-        # Try to extract motion title and generate document_title
+        # Try to extract motion title
         motion_patterns = [
             r'(MOTION\s+TO\s+[A-Z\s]+)',
             r'(MOTION\s+FOR\s+[A-Z\s]+)',
@@ -797,7 +749,6 @@ Call the submit_motion_info tool with the extracted information.
             if match:
                 motion_title = match.group(1).strip().title()
                 result["motion_title"] = motion_title
-                result["document_title"] = f"Opposition to {motion_title}"
                 break
 
         # Try to detect plaintiff/defendant from "vs" or "v." - preserve original case
@@ -811,6 +762,121 @@ Call the submit_motion_info tool with the extracted information.
             result["multiple_defendants"] = any(sep in result["defendant_caption"].lower() for sep in [';', ' and ', 'et al'])
 
         return result
+
+    def generate_filename(self, document_title: str) -> str:
+        """
+        Generate a filename for a legal document based on its title.
+
+        Uses Claude to apply standard legal abbreviations and formatting.
+
+        Args:
+            document_title: The title of the document (e.g., "Opposition to Motion to Compel")
+
+        Returns:
+            Formatted filename (e.g., "2025.12.26 Opp Mot to Compel")
+        """
+        from datetime import datetime
+        today_date = datetime.now().strftime('%Y.%m.%d')
+
+        # If Claude is not available, use simple fallback
+        if not self.is_available():
+            return self._fallback_generate_filename(document_title, today_date)
+
+        prompt = f"""Generate a filename for a legal document.
+
+Document title: {document_title}
+Today's date: {today_date}
+
+## Filename Generation Rules:
+- Format: [date] [document type abbreviation] [motion abbreviation if applicable]
+- Date format: yyyy.mm.dd (use {today_date})
+- Do NOT use periods in abbreviations (use "Ans" not "Ans.")
+- Do NOT include the case name (file will be in the case folder)
+- Do NOT include file extension
+
+## Standard Abbreviations:
+| Document/Motion Type | Abbreviation |
+|---------------------|--------------|
+| Opposition | Opp |
+| Motion to Dismiss | MTD |
+| Motion for Summary Judgment | MSJ |
+| Motion in Limine | MIL |
+| Motion to Compel | Mot to Compel |
+| Motion to Compel Discovery | Mot to Compel Disc |
+| Motion to Compel Arbitration | Mot to Compel Arb |
+| Motion to Strike | Mot to Strike |
+| Motion to Remand | Mot to Remand |
+| Motion for Reconsideration | Mot Recons |
+| Motion for Sanctions | Mot Sanctions |
+| Reply | Reply |
+| Declaration | Decl |
+| Memorandum of Points and Authorities | MPA |
+
+## Examples:
+- "Opposition to Motion to Dismiss" → "{today_date} Opp MTD"
+- "Opposition to Motion for Summary Judgment" → "{today_date} Opp MSJ"
+- "Opposition to Motion to Compel Discovery" → "{today_date} Opp Mot to Compel Disc"
+- "Reply in Support of Motion to Dismiss" → "{today_date} Reply ISO MTD"
+- "Declaration of John Smith" → "{today_date} Decl of John Smith"
+
+Return ONLY the filename, nothing else."""
+
+        try:
+            response = self._call_claude_api(
+                prompt=prompt,
+                tools=[],
+                max_tokens=100
+            )
+
+            # Extract the text response
+            for block in response.content:
+                if hasattr(block, 'text'):
+                    filename = block.text.strip()
+                    # Remove any quotes if present
+                    filename = filename.strip('"\'')
+                    return filename
+
+            # Fallback if no text found
+            return self._fallback_generate_filename(document_title, today_date)
+
+        except Exception as e:
+            logger.error(f"Error generating filename: {e}")
+            return self._fallback_generate_filename(document_title, today_date)
+
+    def _fallback_generate_filename(self, document_title: str, today_date: str) -> str:
+        """Fallback filename generation when Claude is unavailable."""
+        title_lower = document_title.lower()
+
+        # Check for common patterns and abbreviate
+        if 'opposition' in title_lower:
+            base = f"{today_date} Opp"
+            if 'motion to dismiss' in title_lower:
+                return f"{base} MTD"
+            elif 'motion for summary judgment' in title_lower:
+                return f"{base} MSJ"
+            elif 'motion in limine' in title_lower:
+                return f"{base} MIL"
+            elif 'motion to compel arbitration' in title_lower:
+                return f"{base} Mot to Compel Arb"
+            elif 'motion to compel discovery' in title_lower:
+                return f"{base} Mot to Compel Disc"
+            elif 'motion to compel' in title_lower:
+                return f"{base} Mot to Compel"
+            elif 'motion to strike' in title_lower:
+                return f"{base} Mot to Strike"
+            elif 'motion to remand' in title_lower:
+                return f"{base} Mot to Remand"
+            elif 'motion for reconsideration' in title_lower:
+                return f"{base} Mot Recons"
+            elif 'motion for sanctions' in title_lower:
+                return f"{base} Mot Sanctions"
+            else:
+                return base
+
+        # Default: use date + abbreviated title
+        # Truncate if too long
+        short_title = document_title[:50] if len(document_title) > 50 else document_title
+        return f"{today_date} {short_title}"
 
     def extract_requests(self, full_text: str) -> List[Dict[str, str]]:
         """

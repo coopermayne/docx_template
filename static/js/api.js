@@ -203,7 +203,11 @@ const API = {
         return { blob, filename };
     },
 
-    // Motion Opposition endpoints
+    // Document Generator endpoints (motion opposition)
+    async createDocSession() {
+        return this.request('/motion-opposition/create', { method: 'POST' });
+    },
+
     async uploadMotion(file) {
         return this.uploadFile('/motion-opposition/upload', file);
     },
@@ -219,13 +223,20 @@ const API = {
         });
     },
 
-    async generateOpposition(sessionId, associateInfo) {
+    async suggestDocTitle(sessionId) {
+        return this.request(`/motion-opposition/${sessionId}/suggest-title`);
+    },
+
+    async generateDocument(sessionId, documentTitle, associateInfo) {
         const response = await fetch(`${this.baseUrl}/motion-opposition/${sessionId}/generate`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(associateInfo)
+            body: JSON.stringify({
+                document_title: documentTitle,
+                ...associateInfo
+            })
         });
 
         if (!response.ok) {
@@ -235,7 +246,7 @@ const API = {
 
         // Extract filename from Content-Disposition header
         const contentDisposition = response.headers.get('Content-Disposition');
-        let filename = 'opposition.docx';
+        let filename = 'document.docx';
         if (contentDisposition) {
             const match = contentDisposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i);
             if (match) {

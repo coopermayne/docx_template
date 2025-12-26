@@ -118,8 +118,8 @@ def process_motion_info(motion_info: dict) -> dict:
     """
     Process AI-extracted motion info for use in template.
 
-    Normalizes court_name format and ensures filename has a fallback.
-    The AI now outputs fields that match the template directly.
+    Normalizes court_name format. Document title and filename are
+    handled separately by the user and at generation time.
     """
     # Process court_name: convert literal \n to actual newline, ensure uppercase
     court_name = motion_info.get('court_name', '')
@@ -127,11 +127,6 @@ def process_motion_info(motion_info: dict) -> dict:
     court_name = court_name.replace('\\n', '\n')
     # Remove any commas and ensure uppercase
     court_name = court_name.replace(',', '').upper()
-
-    # Use AI-generated filename if available, otherwise fall back to programmatic generation
-    filename = motion_info.get('filename', '')
-    if not filename:
-        filename = generate_default_filename(motion_info.get('document_title', ''))
 
     # Extract hearing info fields
     hearing_date = motion_info.get('hearing_date', '')
@@ -150,14 +145,58 @@ def process_motion_info(motion_info: dict) -> dict:
         'judge_name': motion_info.get('judge_name', ''),
         'mag_judge_name': motion_info.get('mag_judge_name', ''),
         'motion_title': motion_info.get('motion_title', ''),
-        'document_title': motion_info.get('document_title', 'Opposition to Motion'),
-        'filename': filename,
         'cert_of_compliance': motion_info.get('cert_of_compliance', False),
         'hearing_date': hearing_date,
         'hearing_time': hearing_time,
         'hearing_location': hearing_location,
         'hearing_info': hearing_info
     }
+
+
+@motion_opposition_bp.route('/create', methods=['POST'])
+def create_blank_session():
+    """
+    Create a blank session without uploading a PDF.
+
+    Returns an empty session with default template vars for manual entry.
+    """
+    session_id = uuid.uuid4().hex
+
+    # Create empty template vars
+    template_vars = {
+        'court_name': '',
+        'plaintiff_caption': '',
+        'defendant_caption': '',
+        'multiple_plaintiffs': False,
+        'multiple_defendants': False,
+        'case_number': '',
+        'judge_name': '',
+        'mag_judge_name': '',
+        'motion_title': '',
+        'cert_of_compliance': False,
+        'hearing_date': '',
+        'hearing_time': '',
+        'hearing_location': '',
+        'hearing_info': False
+    }
+
+    # Create session data
+    session_data = {
+        'id': session_id,
+        'filename': None,
+        'file_path': None,
+        'template_vars': template_vars,
+        'raw_motion_info': None
+    }
+
+    # Save session
+    save_session(session_id, session_data)
+
+    return jsonify({
+        'success': True,
+        'session_id': session_id,
+        'template_vars': template_vars
+    }), 200
 
 
 @motion_opposition_bp.route('/upload', methods=['POST'])
@@ -262,9 +301,9 @@ def update_motion_session(session_id):
     if not data or 'template_vars' not in data:
         return jsonify({'error': 'Missing template_vars in request body'}), 400
 
-    # Validate required fields
+    # Validate required fields (document_title is handled at generation time)
     template_vars = data['template_vars']
-    required_fields = ['court_name', 'case_number', 'plaintiff_caption', 'defendant_caption', 'document_title', 'filename']
+    required_fields = ['court_name', 'case_number', 'plaintiff_caption', 'defendant_caption']
     missing = [f for f in required_fields if not template_vars.get(f)]
     if missing:
         return jsonify({
@@ -290,12 +329,37 @@ def update_motion_session(session_id):
     }), 200
 
 
+@motion_opposition_bp.route('/<session_id>/suggest-title', methods=['GET'])
+def suggest_title(session_id):
+    """
+    Suggest a document title based on the motion title.
+
+    Returns a suggested title like "Opposition to Motion to Compel".
+    """
+    session = load_session(session_id)
+    if not session:
+        return jsonify({'error': 'Session not found'}), 404
+
+    template_vars = session.get('template_vars', {})
+    motion_title = template_vars.get('motion_title', '')
+
+    if motion_title:
+        suggested_title = f"Opposition to {motion_title}"
+    else:
+        suggested_title = "Opposition to Motion"
+
+    return jsonify({
+        'suggested_title': suggested_title
+    }), 200
+
+
 @motion_opposition_bp.route('/<session_id>/generate', methods=['POST'])
 def generate_opposition(session_id):
     """
-    Generate opposition document from template.
+    Generate document from template.
 
     Expects JSON with:
+    - document_title: Title of the document (required)
     - associate_name: Attorney name (from logged-in user)
     - associate_bar: Bar number (from logged-in user)
     - associate_email: Email (from logged-in user)
@@ -307,6 +371,11 @@ def generate_opposition(session_id):
         return jsonify({'error': 'Session not found'}), 404
 
     data = request.get_json() or {}
+
+    # Get document title from request (required)
+    document_title = data.get('document_title', '')
+    if not document_title:
+        return jsonify({'error': 'Document title is required'}), 400
 
     # Get associate info from request
     associate_name = data.get('associate_name', '')
@@ -353,7 +422,7 @@ def generate_opposition(session_id):
             'case_number': template_vars.get('case_number', ''),
             'judge_name': template_vars.get('judge_name', ''),
             'mag_judge_name': template_vars.get('mag_judge_name', ''),
-            'document_title': template_vars.get('document_title', ''),
+            'document_title': document_title,
             'associate_name': associate_name,
             'associate_bar': associate_bar,
             'associate_email': associate_email,
@@ -372,11 +441,8 @@ def generate_opposition(session_id):
         doc.save(temp_file.name)
         temp_file.close()
 
-        # Get filename from template vars (user may have edited it)
-        filename = template_vars.get('filename', '')
-        if not filename:
-            # Fallback to default
-            filename = generate_default_filename(template_vars.get('motion_title', ''))
+        # Generate filename from document title using Claude
+        filename = claude_service.generate_filename(document_title)
         # Sanitize and ensure .docx extension
         safe_filename = ''.join(c if c.isalnum() or c in '-_. ' else '_' for c in filename)
         if not safe_filename.lower().endswith('.docx'):
