@@ -302,11 +302,11 @@ class ClaudeService:
                 },
                 "plaintiff_caption": {
                     "type": "string",
-                    "description": "Plaintiff name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple, join with semicolons. Include 'et al.' if present. Do NOT include trailing punctuation (comma, semicolon, period) at the end."
+                    "description": "Plaintiff name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple, join with semicolons. Include 'et al.' if present. Do NOT include trailing comma or semicolon at the end."
                 },
                 "defendant_caption": {
                     "type": "string",
-                    "description": "Defendant name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple, join with semicolons. Include 'et al.' if present. Do NOT include trailing punctuation (comma, semicolon, period) at the end."
+                    "description": "Defendant name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple, join with semicolons. Include 'et al.' if present. Do NOT include trailing comma or semicolon at the end."
                 },
                 "multiple_plaintiffs": {
                     "type": "boolean",
@@ -605,9 +605,9 @@ Extract the following information from the motion document. These fields will be
    or "SUPERIOR COURT OF CALIFORNIA\\nCOUNTY OF LOS ANGELES"
    Use \\n for the line break. Leave empty if not found.
 
-2. **plaintiff_caption**: The plaintiff name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple plaintiffs, join with semicolons. Include "et al." if present. Do NOT include trailing punctuation (comma, semicolon, period) at the end - the template adds punctuation automatically.
+2. **plaintiff_caption**: The plaintiff name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple plaintiffs, join with semicolons. Include "et al." if present. Do NOT include trailing comma or semicolon at the end - the template adds punctuation automatically.
 
-3. **defendant_caption**: The defendant name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple defendants, join with semicolons. Include "et al." if present. Do NOT include trailing punctuation (comma, semicolon, period) at the end - the template adds punctuation automatically.
+3. **defendant_caption**: The defendant name(s) exactly as they appear in the case caption, preserving original capitalization. If multiple defendants, join with semicolons. Include "et al." if present. Do NOT include trailing comma or semicolon at the end - the template adds punctuation automatically.
 
 4. **multiple_plaintiffs**: True if there is more than one plaintiff or "et al." is present, false otherwise.
 

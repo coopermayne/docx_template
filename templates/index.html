@@ -1795,8 +1795,8 @@
                     if ((field === 'plaintiff_caption' || field === 'defendant_caption') && value.trim()) {
                         const trimmed = value.trim();
                         const lastChar = trimmed[trimmed.length - 1];
-                        if (/[,;.]/.test(lastChar)) {
-                            this.fieldErrors[field] = 'Cannot end with comma, semicolon, or period';
+                        if (/[,;]/.test(lastChar)) {
+                            this.fieldErrors[field] = 'Cannot end with a comma or semicolon';
                             return false;
                         }
                     }
