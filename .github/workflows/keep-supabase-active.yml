@@ -12,26 +12,39 @@ jobs:
       - name: Fetch objections from Supabase
         id: ping
         run: |
+          echo "::group::Request Details"
+          echo "Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "Endpoint: /rest/v1/objections?select=id,title&limit=5"
+          echo "::endgroup::"
+
           response=$(curl -s -w "\n%{http_code}" \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/objections?select=id&limit=1" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/objections?select=id,title&limit=5" \
             -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
           http_code=$(echo "$response" | tail -n1)
           body=$(echo "$response" | sed '$d')
-          echo "Response code: $http_code"
+
+          echo "::group::Response"
+          echo "HTTP Status: $http_code"
           echo "Body: $body"
+          echo "::endgroup::"
+
           if [ "$http_code" -ne 200 ]; then
+            echo "::error::Supabase returned HTTP $http_code"
             echo "status=failed" >> $GITHUB_OUTPUT
-            echo "error=HTTP $http_code" >> $GITHUB_OUTPUT
             exit 1
           fi
+
           if [ "$body" = "[]" ] || [ -z "$body" ]; then
+            echo "::error::No objections returned from Supabase"
             echo "status=failed" >> $GITHUB_OUTPUT
-            echo "error=No objections returned" >> $GITHUB_OUTPUT
             exit 1
           fi
+
+          # Count objections returned
+          count=$(echo "$body" | grep -o '"id"' | wc -l)
+          echo "::notice::Successfully fetched $count objection(s) from Supabase"
           echo "status=success" >> $GITHUB_OUTPUT
-          echo "Successfully pinged Supabase"
 
       - name: Create issue on failure
         if: failure()
