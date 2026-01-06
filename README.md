@@ -1,14 +1,64 @@
-# docx_template
+# Legal Discovery RFP Response Generator
 
-A Python backend API for generating Word (DOCX) documents from templates using docxtpl.
+A Python/Flask backend with Claude AI integration for analyzing legal discovery requests (Requests for Production) and generating formatted Word document responses.
 
 ## Features
 
-- 🚀 Simple REST API built with Flask
-- 📄 Generate Word documents from templates with custom data
-- 🔧 Template-based document generation using Jinja2 syntax
-- ☁️ Ready for deployment on Render
-- 💾 Server-stored templates (custom template upload can be added later)
+- 📄 Upload and parse RFP PDFs with automatic case info extraction
+- 🤖 AI-powered analysis of discovery requests using Claude
+- 📋 Manage responsive documents with Bates number detection
+- ⚖️ Customizable objections library stored in Supabase
+- 📝 Generate professional Word document responses from templates
+- 👥 Multi-user support with user profiles
+- 📁 Custom document templates per user
+
+## Prerequisites
+
+### Required Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | **Yes** | API key for Claude AI features (analysis, case info extraction) |
+| `SUPABASE_URL` | **Yes** | Your Supabase project URL |
+| `SUPABASE_ANON_KEY` | **Yes** | Supabase anonymous/public key |
+| `CLAUDE_MODEL` | No | Claude model to use (default: `claude-sonnet-4-20250514`) |
+| `PORT` | No | Server port (default: 5000, Render uses 10000) |
+
+### Required External Services
+
+#### 1. Anthropic API (Claude)
+
+Used for:
+- Analyzing RFP requests and suggesting responses
+- Extracting case information from PDF first pages
+- Composing response text
+
+**Setup:**
+1. Create account at [console.anthropic.com](https://console.anthropic.com)
+2. Generate an API key
+3. Set `ANTHROPIC_API_KEY` environment variable
+
+#### 2. Supabase
+
+Used for:
+- Storing objections library (`objections` table)
+- User profiles (`users` table)
+- Document templates (`templates` table + `templates` storage bucket)
+
+**Setup:**
+1. Create project at [supabase.com](https://supabase.com)
+2. Run the schema from `supabase_schema.sql`
+3. Create a storage bucket named `templates` (private)
+4. Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` environment variables
+
+**Database Schema:**
+```sql
+-- See supabase_schema.sql for full schema
+-- Key tables:
+--   objections: id, short_form, full_form, category, user_id
+--   users: id, bar_number, name, email, icon
+--   templates: id, name, user_id, storage_path, created_at
+```
 
 ## Installation
 
@@ -18,7 +68,7 @@ git clone https://github.com/coopermayne/docx_template.git
 cd docx_template
 ```
 
-2. Create a virtual environment (recommended):
+2. Create a virtual environment:
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -29,155 +79,110 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Create a sample template (if not already created):
+4. Set up environment variables:
 ```bash
-python create_sample_template.py
+export ANTHROPIC_API_KEY="your-api-key"
+export SUPABASE_URL="https://your-project.supabase.co"
+export SUPABASE_ANON_KEY="your-anon-key"
 ```
 
-## Running Locally
+## Running the Application
 
-Start the Flask application:
+### Development
 ```bash
 python app.py
 ```
-
 The API will be available at `http://localhost:5000`
 
-## API Endpoints
-
-### GET `/`
-Returns API information and available endpoints.
-
-**Example:**
+### Production
 ```bash
-curl http://localhost:5000/
+gunicorn app:app
 ```
 
-### GET `/health`
-Health check endpoint for monitoring.
+## API Overview
 
-**Response:**
-```json
-{
-  "status": "healthy"
-}
+### Session Management
+- `POST /api/session/create` - Create new session
+- `GET /api/session/<id>` - Get session data
+- `DELETE /api/session/<id>` - Delete session
+
+### RFP Processing
+- `POST /api/rfp/upload` - Upload RFP PDF
+- `GET /api/rfp/<id>/case-info` - Get extracted case info
+- `PUT /api/rfp/<id>/case-info` - Update case info
+
+### Document Management
+- `POST /api/documents/upload` - Upload responsive documents
+- `GET /api/documents/<session_id>` - List documents
+- `DELETE /api/documents/<session_id>/<doc_id>` - Remove document
+
+### Analysis & Generation
+- `POST /api/analyze/<session_id>` - Run AI analysis on requests
+- `POST /api/generate/<session_id>` - Generate Word response document
+
+### Objections (Supabase)
+- `GET /api/objections` - List all objections
+- `POST /api/objections` - Create objection
+- `PUT /api/objections/<id>` - Update objection
+- `DELETE /api/objections/<id>` - Delete objection
+
+### Users (Supabase)
+- `GET /api/users` - List all users
+- `POST /api/users` - Create user
+- `PUT /api/users/<id>` - Update user
+
+### Templates (Supabase)
+- `GET /api/templates` - List templates
+- `POST /api/templates` - Upload template
+- `DELETE /api/templates/<id>` - Delete template
+
+## Architecture
+
+```
+Frontend (Alpine.js SPA)
+         │
+         ▼
+Flask API (app.py + api/ blueprints)
+         │
+    ┌────┴────┐
+    ▼         ▼
+Services   Models
+    │
+    ├── claude_service.py     # AI integration
+    ├── pdf_parser.py         # PDF text extraction
+    ├── document_generator.py # Word doc generation
+    ├── session_store.py      # JSON file persistence
+    ├── bates_detector.py     # Bates number extraction
+    └── supabase_service.py   # Supabase REST client
 ```
 
-### GET `/generate`
-Generate a Word document from a template with provided query parameters.
+## Data Flow
 
-**Query Parameters:**
-- `template` (optional): Name of the template file (default: `default_template.docx`)
-- All other parameters will be passed to the template as context variables
-
-**Example:**
-```bash
-curl "http://localhost:5000/generate?name=John%20Doe&company=Acme%20Corp&date=2024-01-15&description=Sample%20document" --output generated.docx
-```
-
-**Response:**
-- Success: Returns a downloadable `.docx` file
-- Error: Returns JSON with error details
-
-## Template Format
-
-Templates are Word documents (`.docx`) that use Jinja2 syntax for placeholders:
-
-- Simple variables: `{{ variable_name }}`
-- The sample template includes fields like: `{{ name }}`, `{{ company }}`, `{{ date }}`, etc.
-
-### Creating Custom Templates
-
-1. Create a Word document with your desired layout
-2. Add Jinja2 placeholders where you want dynamic content (e.g., `{{ name }}`)
-3. Save the document as `.docx` in the `templates/` directory
-4. Use the template name in the API call: `/generate?template=your_template.docx&name=Value`
+1. **Session Creation** - Initialize new RFP response session
+2. **RFP Upload** - PDF parsed, requests extracted, case info auto-extracted via Claude
+3. **Document Upload** - Responsive documents added, Bates numbers detected from filenames
+4. **Analysis** - Claude analyzes each request, suggests responses and objections
+5. **Generation** - Word document created from template with all response data
 
 ## Testing
-
-Run the included tests to verify everything is working:
 
 ```bash
 python -m unittest test_app.py -v
 ```
 
-Or use the example script to see the API in action:
+## Deployment
 
-```bash
-python example_usage.py
-```
+Configured for Render deployment via `render.yaml`.
 
-This will generate a sample document with predefined parameters.
+Required Render environment variables:
+- `ANTHROPIC_API_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
 
-## Project Structure
+## Project Roadmap
 
-```
-docx_template/
-├── app.py                      # Main Flask application
-├── requirements.txt            # Python dependencies
-├── render.yaml                 # Render deployment configuration
-├── create_sample_template.py   # Script to create sample template
-├── example_usage.py            # Example script showing API usage
-├── test_app.py                 # Unit tests for the API
-├── templates/                  # Directory for document templates
-│   └── default_template.docx   # Default sample template
-└── README.md                   # This file
-```
-
-## Deployment on Render
-
-This application is configured for deployment on Render using the included `render.yaml` configuration.
-
-### Deploy Steps:
-
-1. Push your code to GitHub
-2. Connect your GitHub repository to Render
-3. Render will automatically detect the `render.yaml` file
-4. The application will be built and deployed automatically
-
-### Environment Variables (Optional):
-
-- `PORT`: The port the application runs on (default: 5000, Render uses 10000)
-
-## Example Usage
-
-### Generate a document with custom data:
-
-```bash
-curl "http://localhost:5000/generate?name=Jane%20Smith&company=Tech%20Solutions&date=2024-12-16&description=Quarterly%20Report&additional_info=This%20is%20additional%20information" --output report.docx
-```
-
-This will generate a Word document with all the provided data filled into the template.
-
-### Using a custom template:
-
-1. Create your template: `my_custom_template.docx`
-2. Place it in the `templates/` directory
-3. Call the API:
-```bash
-curl "http://localhost:5000/generate?template=my_custom_template.docx&field1=value1&field2=value2" --output output.docx
-```
-
-## Future Enhancements
-
-- [ ] Support for uploading custom templates via API
-- [ ] POST endpoint for more complex data structures
-- [ ] Template management (list, upload, delete templates)
-- [ ] Authentication and authorization
-- [ ] Rate limiting
-- [ ] Template validation
-
-## Technologies Used
-
-- **Flask**: Web framework
-- **docxtpl**: Python library for templating Word documents
-- **python-docx**: Working with Word documents
-- **Gunicorn**: Production WSGI server
+See [docs/ROADMAP.md](docs/ROADMAP.md) for planned features and development roadmap.
 
 ## License
 
 MIT
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
