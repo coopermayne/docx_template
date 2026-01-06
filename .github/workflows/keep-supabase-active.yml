@@ -5,6 +5,9 @@ on:
     - cron: '0 12 * * *'  # Daily at noon UTC
   workflow_dispatch:  # Allow manual trigger
 
+permissions:
+  issues: write
+
 jobs:
   ping:
     runs-on: ubuntu-latest
@@ -14,11 +17,11 @@ jobs:
         run: |
           echo "::group::Request Details"
           echo "Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          echo "Endpoint: /rest/v1/objections?select=id,title&limit=5"
+          echo "Endpoint: /rest/v1/objections?select=id,name&limit=5"
           echo "::endgroup::"
 
           response=$(curl -s -w "\n%{http_code}" \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/objections?select=id,title&limit=5" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/objections?select=id,name&limit=5" \
             -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
           http_code=$(echo "$response" | tail -n1)
