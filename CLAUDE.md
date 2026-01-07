@@ -25,7 +25,7 @@ python -m unittest test_app.py -v
 ## Environment Variables
 
 - `ANTHROPIC_API_KEY` - Required for Claude AI features (analysis, extraction)
-- `CLAUDE_MODEL` - Model name (default: claude-sonnet-4-latest)
+- `CLAUDE_MODEL` - Model name (default: claude-sonnet-4-20250514)
 - `PORT` - Server port (default: 5000, Render uses 10000)
 - `SUPABASE_URL` - Supabase project URL (required for objections)
 - `SUPABASE_ANON_KEY` - Supabase anonymous key (required for objections)

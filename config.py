@@ -8,7 +8,7 @@ class Config:
 
     # Claude API
     ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
-    CLAUDE_MODEL = os.environ.get('CLAUDE_MODEL', 'claude-sonnet-4-latest')
+    CLAUDE_MODEL = os.environ.get('CLAUDE_MODEL', 'claude-sonnet-4-20250514')
 
     # File uploads
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', './data/uploads')
