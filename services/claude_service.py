@@ -137,11 +137,12 @@ class ClaudeService:
                                 "items": {"type": "string"},
                                 "description": "List of objection IDs that apply"
                             },
-                            "objection_reasoning": {
-                                "type": "object",
-                                "description": "One-sentence reasoning for each objection (keyed by objection ID), explaining why it applies or doesn't apply",
-                                "additionalProperties": {"type": "string"}
-                            },
+                            # COMMENTED OUT FOR SPEED - add back if needed:
+                            # "objection_reasoning": {
+                            #     "type": "object",
+                            #     "description": "One-sentence reasoning for each objection (keyed by objection ID), explaining why it applies or doesn't apply",
+                            #     "additionalProperties": {"type": "string"}
+                            # },
                             "documents": {
                                 "type": "array",
                                 "items": {"type": "string"},
@@ -152,7 +153,7 @@ class ClaudeService:
                                 "description": "Brief analysis notes"
                             }
                         },
-                        "required": ["objections", "objection_reasoning", "documents", "notes"]
+                        "required": ["objections", "documents", "notes"]
                     }
                 }
             },
@@ -887,6 +888,8 @@ Return ONLY the filename, nothing else."""
         if not self.is_available():
             return []
 
+        logger.info(f"extract_requests called with {len(full_text)} chars of text")
+
         prompt = f"""You are extracting individual Requests for Production from a legal discovery document.
 
 ## CRITICAL INSTRUCTIONS - READ CAREFULLY:
@@ -929,11 +932,15 @@ Extract each request with its number and exact verbatim text. Call the submit_re
             )
 
             # Extract the tool use response
+            logger.debug(f"extract_requests response has {len(response.content)} content blocks")
             for block in response.content:
+                logger.debug(f"Block type: {block.type}, name: {getattr(block, 'name', 'N/A')}")
                 if block.type == "tool_use" and block.name == "submit_requests":
-                    return block.input.get("requests", [])
+                    requests = block.input.get("requests", [])
+                    logger.info(f"Extracted {len(requests)} requests via Claude")
+                    return requests
 
-            logger.warning("No tool use found in extract_requests response")
+            logger.warning(f"No tool use found in extract_requests response. Content types: {[b.type for b in response.content]}")
             return []
 
         except ClaudeAPIError as e:
@@ -1056,7 +1063,7 @@ Extract each request with its number and exact verbatim text. Call the submit_re
                 prompt=prompt,
                 tools=[self.ANALYSIS_TOOL],
                 tool_name="submit_analysis",
-                max_tokens=16000
+                max_tokens=8000  # Haiku max is 8192
             )
 
             # Extract the tool use response
@@ -1090,6 +1097,7 @@ Extract each request with its number and exact verbatim text. Call the submit_re
 
         This method is decorated with retry_with_backoff to handle transient errors.
         """
+        logger.info(f"Calling Claude API with model={self.model}, tool={tool_name}")
         return self.client.messages.create(
             model=self.model,
             max_tokens=max_tokens,
@@ -1143,10 +1151,8 @@ Extract each request with its number and exact verbatim text. Call the submit_re
 ## Instructions
 For each request, analyze and provide:
 1. **Objections**: Which objections (if any) clearly apply. Be conservative - only suggest objections that are clearly warranted based on the request's language.
-2. **Objection Reasoning**: For EVERY available objection (whether selected or not), provide exactly ONE sentence explaining why it applies or doesn't apply to this specific request. This is for internal reference only. Key by objection ID.
-3. **Objection Arguments**: For EVERY available objection (whether selected or not), write exactly ONE persuasive sentence that could be included in the legal response document to support that objection. Write as if the objection IS being raised - make it specific to this request's language. This will be appended after the formal objection language in the document. Key by objection ID.
-4. **Documents**: Which documents (if any) appear potentially responsive based on their filenames, Bates numbers, and descriptions.
-5. **Notes**: Brief analysis (1-2 sentences) explaining your reasoning or flagging any issues.
+2. **Documents**: Which documents (if any) appear potentially responsive based on their filenames, Bates numbers, and descriptions.
+3. **Notes**: Brief analysis (1-2 sentences) explaining your reasoning or flagging any issues.
 
 Use the request NUMBER (e.g., "1", "2") as the key. Only include objection IDs and document IDs from the lists provided above.
 
