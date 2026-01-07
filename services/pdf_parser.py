@@ -171,10 +171,13 @@ def parse_rfp(pdf_path: str, use_claude: bool = True) -> Tuple[List[RFPRequest],
     # Extract text from PDF first
     reader = PdfReader(pdf_path)
     full_text = ""
-    for page in reader.pages:
+    text_without_page1 = ""  # For Claude extraction (skip case caption on page 1)
+    for i, page in enumerate(reader.pages):
         text = page.extract_text()
         if text:
             full_text += text + "\n"
+            if i > 0:  # Skip page 1 for Claude extraction
+                text_without_page1 += text + "\n"
 
     # Check if PDF has any meaningful text content
     # Strip whitespace and check if there's actual content
@@ -185,12 +188,16 @@ def parse_rfp(pdf_path: str, use_claude: bool = True) -> Tuple[List[RFPRequest],
             import pdfplumber
             with pdfplumber.open(pdf_path) as pdf:
                 plumber_text = ""
-                for page in pdf.pages:
+                plumber_text_without_page1 = ""
+                for i, page in enumerate(pdf.pages):
                     text = page.extract_text()
                     if text:
                         plumber_text += text + "\n"
+                        if i > 0:
+                            plumber_text_without_page1 += text + "\n"
                 if len(plumber_text.strip()) >= 50:
                     full_text = plumber_text
+                    text_without_page1 = plumber_text_without_page1
                 else:
                     raise PDFNotOCRError(
                         "This PDF appears to be a scanned image without OCR text. "
@@ -211,6 +218,8 @@ def parse_rfp(pdf_path: str, use_claude: bool = True) -> Tuple[List[RFPRequest],
         try:
             from services.claude_service import claude_service
             if claude_service.is_available():
+                # Send full text to Claude - Haiku is fast enough that we don't need to trim
+                print(f"[parse_rfp] Sending {len(full_text)} chars to Claude for request extraction")
                 claude_requests = claude_service.extract_requests(full_text)
                 if claude_requests and len(claude_requests) >= 1:
                     # Convert to RFPRequest objects
