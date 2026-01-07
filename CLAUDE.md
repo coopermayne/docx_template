@@ -82,6 +82,13 @@ Uses `tool_choice` constraint for structured outputs. Three tools defined:
 
 Falls back to keyword-based analysis when Claude unavailable.
 
+**Future Optimization - Prompt Caching:**
+For very large RFPs (100+ requests) with many uploaded documents, Anthropic's prompt caching could reduce costs by caching the repeated system content (objections list, documents list, instructions) across chunk API calls. Requirements:
+- Minimum 1024 tokens of cacheable content (Sonnet)
+- Multiple chunks needed to see benefit (cache created on first call, read on subsequent)
+- See: https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
+- Implementation would involve: adding `system` parameter to `_call_claude_api()` with `cache_control: {"type": "ephemeral"}` on content blocks
+
 ### Persistence
 - Sessions: JSON files in ./data/sessions/{session_id}.json
 - Uploads: ./data/uploads/{session_id}/
