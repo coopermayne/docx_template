@@ -30,7 +30,6 @@ class DocumentGenerator:
         multiple_defendants: bool = False,
         multiple_propounding_parties: bool = False,
         multiple_responding_parties: bool = False,
-        include_reasoning: bool = False,
         associate_name: str = "",
         associate_bar: str = "",
         associate_email: str = ""
@@ -54,7 +53,6 @@ class DocumentGenerator:
             multiple_defendants: True if multiple defendants in case caption
             multiple_propounding_parties: True if RFP propounded by multiple defendants
             multiple_responding_parties: True if RFP addressed to multiple plaintiffs
-            include_reasoning: If True, include AI-generated arguments after each objection
 
         Returns:
             Path to the generated document
@@ -144,8 +142,7 @@ class DocumentGenerator:
             response_text = self._build_response_text(
                 selected_objections,
                 selected_documents,
-                responding_party,
-                objection_arguments=req.objection_arguments if include_reasoning else None
+                responding_party
             )
 
             # Build request data for template
@@ -191,8 +188,7 @@ class DocumentGenerator:
         self,
         objections: List[Dict],
         documents: List[Dict],
-        responding_party: str,
-        objection_arguments: Optional[Dict[str, str]] = None
+        responding_party: str
     ) -> str:
         """
         Build the response text from objections and documents.
@@ -201,7 +197,6 @@ class DocumentGenerator:
             objections: List of selected objection dictionaries
             documents: List of selected document dictionaries
             responding_party: Name of the responding party
-            objection_arguments: Optional dict of objection_id -> persuasive argument text
 
         Returns:
             Formatted response text
@@ -210,15 +205,7 @@ class DocumentGenerator:
 
         # Add objections (keep "Responding Party" as-is in formal language)
         if objections:
-            objection_texts = []
-            for obj in objections:
-                text = obj['formal_language']
-                # Append persuasive argument if available
-                if objection_arguments and obj['id'] in objection_arguments:
-                    argument = objection_arguments[obj['id']]
-                    if argument:
-                        text = f"{text} {argument}"
-                objection_texts.append(text)
+            objection_texts = [obj['formal_language'] for obj in objections]
             parts.append(" ".join(objection_texts))
 
         # Add document production statement

@@ -48,7 +48,6 @@ def generate_response(session_id):
     multiple_defendants = data.get('multiple_defendants') if 'multiple_defendants' in data else case_info.get('multiple_defendants', False)
     multiple_propounding_parties = data.get('multiple_propounding_parties') if 'multiple_propounding_parties' in data else case_info.get('multiple_propounding_parties', False)
     multiple_responding_parties = data.get('multiple_responding_parties') if 'multiple_responding_parties' in data else case_info.get('multiple_responding_parties', False)
-    include_reasoning = data.get('include_reasoning', False)
 
     # Associate info from signed-in user
     associate_name = data.get('associate_name', '')
@@ -86,7 +85,6 @@ def generate_response(session_id):
                 multiple_defendants=multiple_defendants,
                 multiple_propounding_parties=multiple_propounding_parties,
                 multiple_responding_parties=multiple_responding_parties,
-                include_reasoning=include_reasoning,
                 associate_name=associate_name,
                 associate_bar=associate_bar,
                 associate_email=associate_email

@@ -504,18 +504,6 @@
                             </span>
                         </template>
                     </button>
-                    <button class="btn btn-primary" style="font-size: 1rem; padding: 1rem 2rem;"
-                            @click="generateDocument(true)" :disabled="generating">
-                        <template x-if="!generating">
-                            <span>📄 Generate with Reasoning</span>
-                        </template>
-                        <template x-if="generating">
-                            <span class="loading" style="padding: 0;">
-                                <span class="spinner"></span>
-                                Generating...
-                            </span>
-                        </template>
-                    </button>
                 </div>
 
                 <div class="actions-bar">
@@ -1583,7 +1571,7 @@
                     }
                 },
 
-                async generateDocument(includeReasoning = false) {
+                async generateDocument() {
                     this.generating = true;
                     this.error = null;
 
@@ -1595,7 +1583,7 @@
                             associate_email: this.currentUser.email
                         } : {};
 
-                        const { blob, filename } = await API.generateResponse(this.session.id, includeReasoning, associateInfo);
+                        const { blob, filename } = await API.generateResponse(this.session.id, associateInfo);
 
                         // Download the file
                         const url = window.URL.createObjectURL(blob);
