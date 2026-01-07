@@ -8,7 +8,7 @@ class Config:
 
     # Claude API
     ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
-    CLAUDE_MODEL = os.environ.get('CLAUDE_MODEL', 'claude-sonnet-4-20250514')
+    CLAUDE_MODEL = os.environ.get('CLAUDE_MODEL', 'claude-3-5-haiku-20241022')  # Haiku for speed
 
     # File uploads
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', './data/uploads')
@@ -26,8 +26,8 @@ class Config:
 
     # Claude Analysis Settings
     # Number of RFP requests to analyze per API call (for chunking large RFPs)
-    # 20 requests ≈ 10,000 output tokens, well within 16K max_tokens limit
-    ANALYSIS_CHUNK_SIZE = int(os.environ.get('ANALYSIS_CHUNK_SIZE', 20))
+    # Smaller chunks = more parallel calls = faster with Haiku
+    ANALYSIS_CHUNK_SIZE = int(os.environ.get('ANALYSIS_CHUNK_SIZE', 5))
 
     # Supabase (cloud storage for presets and data)
     SUPABASE_URL = os.environ.get('SUPABASE_URL')  # e.g., https://xxxx.supabase.co
