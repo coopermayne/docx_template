@@ -4,6 +4,11 @@ from PyPDF2 import PdfReader
 from models import RFPRequest
 
 
+class PDFNotOCRError(Exception):
+    """Raised when a PDF appears to be a scanned image without OCR text."""
+    pass
+
+
 class RFPParser:
     """Parse RFP PDFs to extract numbered requests."""
 
@@ -159,6 +164,9 @@ def parse_rfp(pdf_path: str, use_claude: bool = True) -> Tuple[List[RFPRequest],
 
     Returns:
         Tuple of (requests list, parser used)
+
+    Raises:
+        PDFNotOCRError: If the PDF contains no extractable text (likely scanned without OCR)
     """
     # Extract text from PDF first
     reader = PdfReader(pdf_path)
@@ -167,6 +175,36 @@ def parse_rfp(pdf_path: str, use_claude: bool = True) -> Tuple[List[RFPRequest],
         text = page.extract_text()
         if text:
             full_text += text + "\n"
+
+    # Check if PDF has any meaningful text content
+    # Strip whitespace and check if there's actual content
+    stripped_text = full_text.strip()
+    if len(stripped_text) < 50:
+        # Try pdfplumber as fallback before giving up
+        try:
+            import pdfplumber
+            with pdfplumber.open(pdf_path) as pdf:
+                plumber_text = ""
+                for page in pdf.pages:
+                    text = page.extract_text()
+                    if text:
+                        plumber_text += text + "\n"
+                if len(plumber_text.strip()) >= 50:
+                    full_text = plumber_text
+                else:
+                    raise PDFNotOCRError(
+                        "This PDF appears to be a scanned image without OCR text. "
+                        "Please run OCR on the PDF first (using Adobe Acrobat, "
+                        "or a free tool like ocrmypdf) and re-upload."
+                    )
+        except PDFNotOCRError:
+            raise
+        except Exception:
+            raise PDFNotOCRError(
+                "This PDF appears to be a scanned image without OCR text. "
+                "Please run OCR on the PDF first (using Adobe Acrobat, "
+                "or a free tool like ocrmypdf) and re-upload."
+            )
 
     # Try Claude extraction first (if enabled and available)
     if use_claude and full_text:

@@ -5,7 +5,7 @@ import logging
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
 from services.session_store import session_store
-from services.pdf_parser import parse_rfp, extract_first_page_text
+from services.pdf_parser import parse_rfp, extract_first_page_text, PDFNotOCRError
 from services.claude_service import claude_service
 from services.job_manager import job_manager, JobStatus
 from config import Config
@@ -81,7 +81,12 @@ def process_rfp_background(job_id: str, session_id: str, file_path: str, filenam
         logger.info(f"[{job_id}] Calling Claude to extract requests...")
         extract_start = time.time()
 
-        requests_list, parser_used = parse_rfp(file_path)
+        try:
+            requests_list, parser_used = parse_rfp(file_path)
+        except PDFNotOCRError as e:
+            logger.error(f"[{job_id}] PDF has no OCR text: {e}")
+            job_manager.set_failed(job_id, str(e))
+            return
 
         extract_time = time.time() - extract_start
         logger.info(f"[{job_id}] Request extraction completed in {extract_time:.1f}s using {parser_used}")
