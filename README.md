@@ -22,7 +22,7 @@ A Python/Flask backend with Claude AI integration for analyzing legal discovery 
 | `SUPABASE_URL` | **Yes** | Your Supabase project URL |
 | `SUPABASE_ANON_KEY` | **Yes** | Supabase anonymous/public key |
 | `CLAUDE_MODEL` | No | Claude model to use (default: `claude-sonnet-4-20250514`) |
-| `PORT` | No | Server port (default: 5000, Render uses 10000) |
+| `PORT` | No | Server port (default: 5000) |
 
 ### Required External Services
 
@@ -172,12 +172,25 @@ python -m unittest test_app.py -v
 
 ## Deployment
 
-Configured for Render deployment via `render.yaml`.
+Deployed via **Coolify** on a Hetzner VPS.
 
-Required Render environment variables:
-- `ANTHROPIC_API_KEY`
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
+### Infrastructure
+- **VPS**: Hetzner CPX21 (4GB RAM, 2 vCPU)
+- **Platform**: Coolify (self-hosted PaaS)
+- **URL**: `https://rfp.californiapolicemisconduct.com`
+
+### Coolify Setup
+1. Dockerfile in repo root handles the build
+2. Environment variables configured in Coolify dashboard:
+   - `ANTHROPIC_API_KEY`
+   - `CLAUDE_MODEL`
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
+3. Persistent storage volume mounted at `/app/data` for sessions and uploads
+4. GitHub webhook enables auto-deploy on push to `main`
+
+### DNS
+A record for subdomain points to the Coolify server IP. SSL is auto-provisioned via Let's Encrypt.
 
 ## Project Roadmap
 
