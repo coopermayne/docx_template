@@ -142,11 +142,6 @@ class ClaudeService:
                                 "description": "One-sentence reasoning for each objection (keyed by objection ID), explaining why it applies or doesn't apply",
                                 "additionalProperties": {"type": "string"}
                             },
-                            "objection_arguments": {
-                                "type": "object",
-                                "description": "One-sentence persuasive legal argument for each objection (keyed by objection ID), written to be included in the response document. Generate for ALL objections, even if not selected.",
-                                "additionalProperties": {"type": "string"}
-                            },
                             "documents": {
                                 "type": "array",
                                 "items": {"type": "string"},
@@ -157,7 +152,7 @@ class ClaudeService:
                                 "description": "Brief analysis notes"
                             }
                         },
-                        "required": ["objections", "objection_reasoning", "objection_arguments", "documents", "notes"]
+                        "required": ["objections", "objection_reasoning", "documents", "notes"]
                     }
                 }
             },
@@ -1224,22 +1219,18 @@ Call the submit_analysis tool with your analysis results.
                             suggested_docs.append(doc.id)
                         break
 
-            # Generate basic reasoning and arguments for each objection
+            # Generate basic reasoning for each objection
             objection_reasoning = {}
-            objection_arguments = {}
             for obj in objections:
                 obj_id = obj['id']
                 if obj_id in suggested_objs:
                     objection_reasoning[obj_id] = f"Keywords in the request suggest this objection may apply."
                 else:
                     objection_reasoning[obj_id] = f"No clear indicators that this objection applies."
-                # Use the template argument as fallback
-                objection_arguments[obj_id] = obj.get('argument_template', 'This objection applies to the request as written.')
 
             results[req.number] = {
                 'objections': suggested_objs,
                 'objection_reasoning': objection_reasoning,
-                'objection_arguments': objection_arguments,
                 'documents': suggested_docs,
                 'notes': 'Analysis performed using keyword matching (Claude API not available).'
             }
