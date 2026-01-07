@@ -177,7 +177,6 @@ Deployed via **Coolify** on a Hetzner VPS.
 ### Infrastructure
 - **VPS**: Hetzner CPX21 (4GB RAM, 2 vCPU)
 - **Platform**: Coolify (self-hosted PaaS)
-- **URL**: `https://rfp.californiapolicemisconduct.com`
 
 ### Coolify Setup
 1. Dockerfile in repo root handles the build
