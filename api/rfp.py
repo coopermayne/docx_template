@@ -51,10 +51,11 @@ def process_rfp_background(job_id: str, session_id: str, file_path: str, filenam
     """
     Process RFP PDF in background thread.
 
-    Extracts requests using Claude and case info from first page.
+    Extracts requests using Claude and case info from first page IN PARALLEL.
     Updates job progress as it goes.
     """
     import time
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     start_time = time.time()
 
     logger.info(f"[{job_id}] Starting RFP processing for {filename}")
@@ -66,53 +67,85 @@ def process_rfp_background(job_id: str, session_id: str, file_path: str, filenam
         return
 
     try:
-        # Step 1: Parse PDF to extract requests (this uses Claude)
-        logger.info(f"[{job_id}] Step 1: Extracting text from PDF...")
-        job_manager.update_progress(job_id, 0, "Reading PDF text...")
-
         # First just read the PDF (fast)
+        logger.info(f"[{job_id}] Reading PDF...")
+        job_manager.update_progress(job_id, 0, "Reading PDF...")
+
         from PyPDF2 import PdfReader
         reader = PdfReader(file_path)
         page_count = len(reader.pages)
         logger.info(f"[{job_id}] PDF has {page_count} pages")
-        job_manager.update_progress(job_id, 0, f"PDF has {page_count} pages. Sending to Claude for extraction...")
 
-        # Now do the Claude extraction (slow part)
-        logger.info(f"[{job_id}] Calling Claude to extract requests...")
+        # Extract first page text for case info (needed for parallel execution)
+        first_page_text = extract_first_page_text(file_path)
+
+        job_manager.update_progress(job_id, 0, f"PDF has {page_count} pages. Extracting requests and case info...")
+
+        # Define tasks to run in parallel
+        def extract_requests_task():
+            """Extract requests from PDF using Claude."""
+            try:
+                return parse_rfp(file_path)
+            except PDFNotOCRError as e:
+                return None, str(e)
+
+        def extract_case_info_task():
+            """Extract case info from first page."""
+            if not first_page_text:
+                return None
+            try:
+                case_info = claude_service.extract_case_info(first_page_text)
+                return process_case_info(case_info)
+            except Exception as e:
+                logger.warning(f"[{job_id}] Case info extraction failed: {e}")
+                return None
+
+        # Run both extractions in parallel
+        logger.info(f"[{job_id}] Starting parallel extraction (requests + case info)...")
         extract_start = time.time()
 
-        try:
-            requests_list, parser_used = parse_rfp(file_path)
-        except PDFNotOCRError as e:
-            logger.error(f"[{job_id}] PDF has no OCR text: {e}")
-            job_manager.set_failed(job_id, str(e))
-            return
+        requests_list = None
+        parser_used = None
+        case_info = None
+        extraction_error = None
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_requests = executor.submit(extract_requests_task)
+            future_case_info = executor.submit(extract_case_info_task)
+
+            # Wait for both to complete
+            for future in as_completed([future_requests, future_case_info]):
+                if future == future_requests:
+                    result = future.result()
+                    if result[0] is None and result[1]:
+                        # PDFNotOCRError occurred
+                        extraction_error = result[1]
+                    else:
+                        requests_list, parser_used = result
+                elif future == future_case_info:
+                    case_info = future.result()
 
         extract_time = time.time() - extract_start
-        logger.info(f"[{job_id}] Request extraction completed in {extract_time:.1f}s using {parser_used}")
+        logger.info(f"[{job_id}] Parallel extraction completed in {extract_time:.1f}s")
+
+        # Check for extraction errors
+        if extraction_error:
+            logger.error(f"[{job_id}] PDF has no OCR text: {extraction_error}")
+            job_manager.set_failed(job_id, extraction_error)
+            return
 
         if not requests_list:
             logger.warning(f"[{job_id}] No requests found in PDF")
             job_manager.set_failed(job_id, "Could not extract any requests from the PDF. The document may not be a standard RFP format.")
             return
 
-        logger.info(f"[{job_id}] Found {len(requests_list)} requests")
-        job_manager.update_progress(job_id, 1, f"Found {len(requests_list)} requests! Extracting case info...")
+        logger.info(f"[{job_id}] Found {len(requests_list)} requests using {parser_used}")
+        if case_info:
+            logger.info(f"[{job_id}] Case info extracted successfully")
+        else:
+            logger.info(f"[{job_id}] Case info not available (can be extracted later)")
 
-        # Step 2: Extract case info from first page
-        logger.info(f"[{job_id}] Step 2: Extracting case info from first page...")
-        case_info = None
-        try:
-            first_page_text = extract_first_page_text(file_path)
-            if first_page_text:
-                case_info_start = time.time()
-                case_info = claude_service.extract_case_info(first_page_text)
-                case_info = process_case_info(case_info)
-                case_info_time = time.time() - case_info_start
-                logger.info(f"[{job_id}] Case info extracted in {case_info_time:.1f}s")
-        except Exception as e:
-            logger.warning(f"[{job_id}] Case info extraction failed: {e}")
-            # Continue without case info - it can be extracted later
+        job_manager.update_progress(job_id, 1, f"Found {len(requests_list)} requests!")
 
         # Update session with results
         session.rfp_filename = filename
