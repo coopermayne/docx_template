@@ -106,6 +106,7 @@ Generate outgoing discovery requests:
 
 ## Future Considerations
 
+- **OCR for Scanned PDFs** - Auto-OCR scanned PDFs that lack embedded text. Requires `tesseract-ocr` and `poppler-utils` system packages, plus `pytesseract` and `pdf2image` pip packages. Would need Docker deployment or Aptfile for Render. Currently shows error asking user to OCR the PDF first.
 - **Batch RFP Processing** - Handle multiple RFPs in single session
 - **Response Templates** - Save and reuse common response patterns
 - **Export Formats** - PDF export in addition to DOCX
