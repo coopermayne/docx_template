@@ -888,7 +888,8 @@ Return ONLY the filename, nothing else."""
         if not self.is_available():
             return []
 
-        logger.info(f"extract_requests called with {len(full_text)} chars of text")
+        from services.debug import debug_log
+        debug_log("extract_requests called", chars=len(full_text))
 
         prompt = f"""You are extracting individual Requests for Production from a legal discovery document.
 
@@ -932,15 +933,13 @@ Extract each request with its number and exact verbatim text. Call the submit_re
             )
 
             # Extract the tool use response
-            logger.debug(f"extract_requests response has {len(response.content)} content blocks")
             for block in response.content:
-                logger.debug(f"Block type: {block.type}, name: {getattr(block, 'name', 'N/A')}")
                 if block.type == "tool_use" and block.name == "submit_requests":
                     requests = block.input.get("requests", [])
-                    logger.info(f"Extracted {len(requests)} requests via Claude")
+                    debug_log("extract_requests completed", requests_found=len(requests))
                     return requests
 
-            logger.warning(f"No tool use found in extract_requests response. Content types: {[b.type for b in response.content]}")
+            debug_log("No tool use found in extract_requests response", content_types=[b.type for b in response.content])
             return []
 
         except ClaudeAPIError as e:
@@ -1097,14 +1096,17 @@ Extract each request with its number and exact verbatim text. Call the submit_re
 
         This method is decorated with retry_with_backoff to handle transient errors.
         """
-        logger.info(f"Calling Claude API with model={self.model}, tool={tool_name}")
-        return self.client.messages.create(
+        from services.debug import debug_log
+        debug_log(f"Claude API call", model=self.model, tool=tool_name, prompt_chars=len(prompt), max_tokens=max_tokens)
+        response = self.client.messages.create(
             model=self.model,
             max_tokens=max_tokens,
             tools=tools,
             tool_choice={"type": "tool", "name": tool_name},
             messages=[{"role": "user", "content": prompt}]
         )
+        debug_log(f"Claude API response", input_tokens=response.usage.input_tokens, output_tokens=response.usage.output_tokens)
+        return response
 
     def _build_analysis_prompt(
         self,

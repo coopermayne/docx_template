@@ -15,22 +15,28 @@ def run_analysis_background(job_id: str, session_id: str, objections: list):
 
     Updates job progress as chunks complete.
     """
+    from services.debug import debug_log, DebugTimer
+
     session = session_store.get(session_id)
     if not session:
         job_manager.set_failed(job_id, "Session not found")
         return
 
+    debug_log("Analysis started", job_id=job_id, requests=len(session.requests), documents=len(session.documents), objections=len(objections))
+
     try:
         # Create progress callback
         def on_progress(completed: int, total: int, message: str = ""):
+            debug_log("Analysis progress", completed=completed, total=total)
             job_manager.update_progress(job_id, completed, message)
 
-        suggestions = claude_service.analyze_requests(
-            requests=session.requests,
-            documents=session.documents,
-            objections=objections,
-            progress_callback=on_progress
-        )
+        with DebugTimer("Full analysis"):
+            suggestions = claude_service.analyze_requests(
+                requests=session.requests,
+                documents=session.documents,
+                objections=objections,
+                progress_callback=on_progress
+            )
 
         # Update session requests with suggestions
         for req in session.requests:

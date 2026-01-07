@@ -168,42 +168,42 @@ def parse_rfp(pdf_path: str, use_claude: bool = True) -> Tuple[List[RFPRequest],
     Raises:
         PDFNotOCRError: If the PDF contains no extractable text (likely scanned without OCR)
     """
+    from services.debug import debug_log, DebugTimer
+
     # Extract text from PDF first
-    reader = PdfReader(pdf_path)
-    full_text = ""
-    text_without_page1 = ""  # For Claude extraction (skip case caption on page 1)
-    for i, page in enumerate(reader.pages):
-        text = page.extract_text()
-        if text:
-            full_text += text + "\n"
-            if i > 0:  # Skip page 1 for Claude extraction
-                text_without_page1 += text + "\n"
+    with DebugTimer("PyPDF2 text extraction"):
+        reader = PdfReader(pdf_path)
+        full_text = ""
+        for page in reader.pages:
+            text = page.extract_text()
+            if text:
+                full_text += text + "\n"
+
+    debug_log("PDF text extracted", pages=len(reader.pages), chars=len(full_text))
 
     # Check if PDF has any meaningful text content
-    # Strip whitespace and check if there's actual content
     stripped_text = full_text.strip()
     if len(stripped_text) < 50:
+        debug_log("PyPDF2 extraction insufficient, trying pdfplumber", chars=len(stripped_text))
         # Try pdfplumber as fallback before giving up
         try:
             import pdfplumber
-            with pdfplumber.open(pdf_path) as pdf:
-                plumber_text = ""
-                plumber_text_without_page1 = ""
-                for i, page in enumerate(pdf.pages):
-                    text = page.extract_text()
-                    if text:
-                        plumber_text += text + "\n"
-                        if i > 0:
-                            plumber_text_without_page1 += text + "\n"
-                if len(plumber_text.strip()) >= 50:
-                    full_text = plumber_text
-                    text_without_page1 = plumber_text_without_page1
-                else:
-                    raise PDFNotOCRError(
-                        "This PDF appears to be a scanned image without OCR text. "
-                        "Please run OCR on the PDF first (using Adobe Acrobat, "
-                        "or a free tool like ocrmypdf) and re-upload."
-                    )
+            with DebugTimer("pdfplumber text extraction"):
+                with pdfplumber.open(pdf_path) as pdf:
+                    plumber_text = ""
+                    for page in pdf.pages:
+                        text = page.extract_text()
+                        if text:
+                            plumber_text += text + "\n"
+                    if len(plumber_text.strip()) >= 50:
+                        full_text = plumber_text
+                        debug_log("pdfplumber extraction successful", chars=len(full_text))
+                    else:
+                        raise PDFNotOCRError(
+                            "This PDF appears to be a scanned image without OCR text. "
+                            "Please run OCR on the PDF first (using Adobe Acrobat, "
+                            "or a free tool like ocrmypdf) and re-upload."
+                        )
         except PDFNotOCRError:
             raise
         except Exception:
@@ -218,9 +218,9 @@ def parse_rfp(pdf_path: str, use_claude: bool = True) -> Tuple[List[RFPRequest],
         try:
             from services.claude_service import claude_service
             if claude_service.is_available():
-                # Send full text to Claude - Haiku is fast enough that we don't need to trim
-                print(f"[parse_rfp] Sending {len(full_text)} chars to Claude for request extraction")
-                claude_requests = claude_service.extract_requests(full_text)
+                debug_log("Sending to Claude for extraction", chars=len(full_text))
+                with DebugTimer("Claude request extraction"):
+                    claude_requests = claude_service.extract_requests(full_text)
                 if claude_requests and len(claude_requests) >= 1:
                     # Convert to RFPRequest objects
                     requests = []
@@ -232,9 +232,10 @@ def parse_rfp(pdf_path: str, use_claude: bool = True) -> Tuple[List[RFPRequest],
                             raw_text=req.get('text', '')  # Same as text for Claude extraction
                         ))
                     if requests:
+                        debug_log("Claude extraction successful", requests=len(requests))
                         return requests, 'Claude'
         except Exception as e:
-            print(f"Claude extraction failed, falling back to regex: {e}")
+            debug_log("Claude extraction failed, falling back to regex", error=str(e))
 
     # Fallback to regex-based parser
     parser = RFPParser()

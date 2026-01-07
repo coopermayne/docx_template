@@ -60,32 +60,37 @@ def generate_response(session_id):
     requesting_party = data.get('requesting_party') or propounding_party
 
     try:
+        from services.debug import debug_log, DebugTimer
+
         # Generate default document title if not provided
         if not document_title:
             document_title = f"{responding_party.upper()}'S RESPONSES TO {propounding_party.upper()}'S {set_number} SET OF REQUESTS FOR PRODUCTION OF DOCUMENTS"
 
+        debug_log("Generating document", requests=len(session.requests), case_no=case_no)
+
         # Generate document
-        file_path = document_generator.generate_response(
-            session=session,
-            court_name=court_name,
-            header_plaintiffs=header_plaintiffs,
-            header_defendants=header_defendants,
-            case_no=case_no,
-            client_name=client_name,
-            requesting_party=requesting_party,
-            propounding_party=propounding_party,
-            responding_party=responding_party,
-            set_number=set_number,
-            document_title=document_title,
-            multiple_plaintiffs=multiple_plaintiffs,
-            multiple_defendants=multiple_defendants,
-            multiple_propounding_parties=multiple_propounding_parties,
-            multiple_responding_parties=multiple_responding_parties,
-            include_reasoning=include_reasoning,
-            associate_name=associate_name,
-            associate_bar=associate_bar,
-            associate_email=associate_email
-        )
+        with DebugTimer("Document generation"):
+            file_path = document_generator.generate_response(
+                session=session,
+                court_name=court_name,
+                header_plaintiffs=header_plaintiffs,
+                header_defendants=header_defendants,
+                case_no=case_no,
+                client_name=client_name,
+                requesting_party=requesting_party,
+                propounding_party=propounding_party,
+                responding_party=responding_party,
+                set_number=set_number,
+                document_title=document_title,
+                multiple_plaintiffs=multiple_plaintiffs,
+                multiple_defendants=multiple_defendants,
+                multiple_propounding_parties=multiple_propounding_parties,
+                multiple_responding_parties=multiple_responding_parties,
+                include_reasoning=include_reasoning,
+                associate_name=associate_name,
+                associate_bar=associate_bar,
+                associate_email=associate_email
+            )
 
         # Generate download filename: yyyy.mm.dd FILENAME.docx
         date_prefix = datetime.now().strftime('%Y.%m.%d')

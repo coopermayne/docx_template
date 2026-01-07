@@ -3,6 +3,9 @@ import os
 class Config:
     """Application configuration from environment variables."""
 
+    # Debug mode - enables verbose logging (default True for dev, set to 'false' in production)
+    DEV_DEBUG = os.environ.get('DEV_DEBUG', 'true').lower() in ('true', '1', 'yes')
+
     # Flask
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
